@@ -6,11 +6,13 @@ from django.contrib.auth.models import AbstractUser
 class CustomUser(AbstractUser):
 
     ADMIN = 'Admin'
+    TREASURE = 'Treasure'
     USER = 'User'
 
     ROLE_CHOICES = [
-        (ADMIN, 'Admin'),
+        (ADMIN, 'admin'),
         (USER, 'user'),
+        (TREASURE, 'treasure')
     ]
 
     phone_number = models.CharField(max_length=13, blank=True)
@@ -31,5 +33,3 @@ class UserProfile(models.Model):
 
     def __str__(self):
         return f"{self.user.username}'s Profile"
-
-
