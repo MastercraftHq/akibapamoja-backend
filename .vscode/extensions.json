@@ -8,18 +8,16 @@
     "humao.rest-client"
   ]
 }
-EOF
-echo "🧩 Setting up VSCodium recommended extensions..."
+EOFecho "🧩 Setting up VSCodium recommended extensions..."
 mkdir -p .vscode
 cat <<EOF >.vscode/extensions.json
-    {
-      "recommendations": [
-        "ms-python.python",
-        "batisteo.vscode-django",
-        "esbenp.prettier-vscode",
-        "eamodio.gitlens",
-        "ms-azuretools.vscode-docker",
-        "humao.rest-client"
-      ]
-    }
-    EOF
+{
+  "recommendations": [
+    "ms-python.python",
+    "batisteo.vscode-django",
+    "esbenp.prettier-vscode",
+    "eamodio.gitlens",
+    "ms-azuretools.vscode-docker",
+    "humao.rest-client"
+  ]
+}
