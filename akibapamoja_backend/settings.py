@@ -53,13 +53,14 @@ SIMPLE_JWT = {
 # Application definition
 
 INSTALLED_APPS = [
+    'daphne',
     # 'api',
     # 'corsheaders',
     'rest_framework',
     'users',
     # 'transactions',
     # 'reports',
-    # 'notifications',
+    'notifications',
     # 'groups',
     'django.contrib.admin',
     'django.contrib.auth',
@@ -99,16 +100,12 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'akibapamoja_backend.wsgi.application'
 
+ASGI_APPLICATION = 'akibapamoja_backend.asgi.application'
+
 
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
-# DATABASES = {
-#     'default': {
-#         'ENGINE': 'django.db.backends.sqlite3',
-#         'NAME': BASE_DIR / 'db.sqlite3',
-#     }
-# }
 
 # Database settings
 DATABASES = {
@@ -169,3 +166,9 @@ STATIC_URL = 'static/'
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 CORS_ALLOW_ALL_ORIGINS = True
 CORS_ALLOW_CREDENTIALS = True
+
+# Celery configuration
+CELERY_BROKER_URL = 'redis://localhost:6379/0'  # Redis as the message broker
+CELERY_ACCEPT_CONTENT = ['json']
+CELERY_TASK_SERIALIZER = 'json'
+CELERY_RESULT_BACKEND = 'redis://localhost:6379/0'  # Redis
