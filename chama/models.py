@@ -1,6 +1,8 @@
 import uuid
 from django.db import models
 from django.conf import settings
+import random
+import string
 
 class Chama(models.Model):
     name = models.CharField(max_length=100)
@@ -16,6 +18,17 @@ class Chama(models.Model):
     created_at = models.DateField(auto_now_add=True)
     updated_at = models.DateField(auto_now=True)
     join_code = models.CharField(max_length=12, unique=True)
+
+    def save(self, *args, **kwargs):
+        if not self.join_code:
+            self.join_code = self.generate_unique_code()
+        super().save(*args, **kwargs)
+
+    def generate_unique_code(self):
+        while True:
+            code = ''.join(random.choices(string.ascii_uppercase + string.digits, k=8))
+            if not Chama.objects.filter(join_code=code).exists():
+                return code
 
     def __str__(self):
         return self.name
