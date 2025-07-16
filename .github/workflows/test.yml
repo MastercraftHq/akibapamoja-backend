@@ -1,0 +1,56 @@
+name: Django Unit Tests
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+    branches: [main, dev]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_DB: akiba_test
+          POSTGRES_USER: akiba
+          POSTGRES_PASSWORD: akiba
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd="pg_isready"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+
+    env:
+      DB_NAME: akiba_test
+      DB_USER: akiba
+      DB_PASSWORD: akiba
+      DB_HOST: 127.0.0.1
+      DB_PORT: 5432
+      SECRET_KEY: your-secret-key
+      DEBUG: true
+
+    steps:
+      - name: 📥 Checkout code
+        uses: actions/checkout@v4
+
+      - name: 🐍 Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: 📦 Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: ⚙️ Run migrations
+        run: |
+          python manage.py migrate
+
+      - name: 🧪 Run unit tests
+        run: |
+          python manage.py test
