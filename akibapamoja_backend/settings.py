@@ -62,7 +62,7 @@ INSTALLED_APPS = [
     # 'transactions',
     # 'reports',
     # 'notifications',
-    # 'groups',
+    'chama',
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
