@@ -4,6 +4,13 @@ from django.contrib.auth.models import AbstractUser
 
 # Custom user model (replaces Django's default User)
 class CustomUser(AbstractUser):
+    """
+    CustomUser model
+
+    Adds details:
+        phone number
+        role : Admin, Treasurer, User
+    """
 
     ADMIN = 'Admin'
     TREASURE = 'Treasure'
@@ -27,6 +34,13 @@ class CustomUser(AbstractUser):
         return f"{self.username} ({self.role})"
     
 class UserProfile(models.Model):
+    """
+    User profile model
+
+    Adds details:
+        bio
+        avatar
+    """
     user = models.OneToOneField(CustomUser, on_delete=models.CASCADE, related_name='profile')
     bio = models.TextField(blank=True)
     avatar = models.ImageField(upload_to='avatars/', blank=True, null=True)
