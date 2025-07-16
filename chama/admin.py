@@ -1,3 +1,5 @@
 from django.contrib import admin
+from .models import Chama, Membership
 
-# Register your models here.
+admin.site.register(Chama)
+admin.site.register(Membership)
