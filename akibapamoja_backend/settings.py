@@ -59,7 +59,7 @@ INSTALLED_APPS = [
     'users',
     # Django Admin Documentation
     'django.contrib.admindocs',
-    # 'transactions',
+    'contributions',
     # 'reports',
     # 'notifications',
     # 'groups',
