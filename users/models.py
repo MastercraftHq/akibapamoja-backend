@@ -15,6 +15,7 @@ class CustomUser(AbstractUser):
         (TREASURE, 'treasure')
     ]
 
+    email = models.EmailField(unique=True)
     phone_number = models.CharField(max_length=13, blank=True)
     #national_id = models.CharField(max_length=12, blank=True)
     role = models.CharField(
