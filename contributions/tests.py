@@ -9,9 +9,15 @@ User = get_user_model()
 
 class ContributionAPITests(APITestCase):
     def setUp(self):
-        self.member = User.objects.create_user(username='member', password='pass')
-        self.admin = User.objects.create_user(username='admin', password='pass', is_staff=True)
-        self.non_member = User.objects.create_user(username='outsider', password='pass')
+        self.member = User.objects.create_user(
+            username='member', password='pass', email=f'member_{self._testMethodName}@example.com'
+        )
+        self.admin = User.objects.create_user(
+            username='admin', password='pass', is_staff=True, email=f'admin_{self._testMethodName}@example.com'
+        )
+        self.non_member = User.objects.create_user(
+            username='outsider', password='pass', email=f'outsider_{self._testMethodName}@example.com'
+        )
         self.chama = Chama.objects.create(name='Test Chama', balance=0)
         Membership.objects.create(user=self.member, chama=self.chama)
         Membership.objects.create(user=self.admin, chama=self.chama)
