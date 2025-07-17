@@ -77,6 +77,10 @@
 ### 🤝 Contributing
  ```sql
     git checkout -b feature/your_name
+    git add .
+    git commit -m "✨ Add <feature/your-name> - short description"
+    git pull origin dev --rebase
+    git push origin feature/<your-branch-name>
   ```
 - Push your branch and open a Pull Request (PR).
 - Use git rebase to resolve conflicts and maintain a clean commit history.
