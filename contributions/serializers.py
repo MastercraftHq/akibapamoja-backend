@@ -3,6 +3,9 @@ from django.utils import timezone
 from django.db import models
 from .models import Contribution, ContributionCycle, ContributionSchedule
 from chama.models import Membership
+from django.contrib.auth import get_user_model
+
+User = get_user_model()
 
 class ContributionSerializer(serializers.ModelSerializer):
     
@@ -25,13 +28,13 @@ class ContributionSerializer(serializers.ModelSerializer):
         def validate_member_id(self, value):
             chama = self.context.get('chama')
             if not Membership.objects.filter(
-                chama=chama, user=self.context['request'].user, id=value
+                chama=chama, id=value
             ).exists():
                 raise serializers.ValidationError("Member does not belong to this chama.")
         
         def create(self, validated_data):
+            validated_data["chama"] = self.context["chama"] 
             validated_data["user"] = self.context["request"].user
-            validated_data["chama"] = self.context["chama"]
             return super().create(validated_data)
         
 class ContributionScheduleSerializer(serializers.ModelSerializer):
@@ -76,7 +79,7 @@ class ContributionCreateSerializer(serializers.ModelSerializer):
         chama = self.context.get('chama')
         try:
             member = chama.members.get(id=value)
-        except chama.members.model.DoesNotExist:
+        except User.DoesNotExist:
             raise serializers.ValidationError("Member does not belong to this chama.")
         return member.id
     def create(self, validated_data):
