@@ -22,7 +22,7 @@ class ContributionAPITests(APITestCase):
         Membership.objects.create(user=self.member, chama=self.chama)
         Membership.objects.create(user=self.admin, chama=self.chama)
         self.client = APIClient()
-        self.url = reverse('contribution-list') + f'?chama={self.chama.id}'
+        self.url = reverse('chama-contributions-list', kwargs={'chama_pk': self.chama.id})
 
     def test_member_can_submit_manual_contribution(self):
         self.client.force_authenticate(user=self.member)
