@@ -18,7 +18,7 @@ class ContributionAPITests(APITestCase):
         self.non_member = User.objects.create_user(
             username='outsider', password='pass', email=f'outsider_{self._testMethodName}@example.com'
         )
-        self.chama = Chama.objects.create(name='Test Chama', balance=0)
+        self.chama = Chama.objects.create(name='Test Chama')
         Membership.objects.create(user=self.member, chama=self.chama)
         Membership.objects.create(user=self.admin, chama=self.chama)
         self.client = APIClient()
