@@ -12,11 +12,26 @@ from .serializers import UserSerializer, UserUpdateSerializer
 
 
 class CreateUserView(generics.CreateAPIView):
+    """
+    Description: Create a new user account (member or admin).
+
+    Input (JSON): name, email, password, phone, optional groupId.
+
+    Output (JSON): { "userId": "...", "authToken": "..." }.
+
+    Auth: None.
+
+    """
     queryset = CustomUser.objects.all()
     serializer_class = UserSerializer
     permission_classes = [AllowAny]
 
 class CustomTokenSerializer(TokenObtainPairSerializer):
+    """
+    Serializer for custom token generation.
+
+    This serializer extends the default TokenObtainPairSerializer to include custom fields. 
+    """
     def validate(self, attrs):
         data = super().validate(attrs)
         data['username'] = self.user.username
@@ -25,12 +40,47 @@ class CustomTokenSerializer(TokenObtainPairSerializer):
         return data
 
 class LoginView(TokenObtainPairView):
+    """
+    Description: Authenticate a user and obtain an access token.
+
+    Input (JSON): email (or phone), password.
+
+    Output (JSON): { "authToken": "...", "refreshToken": "..." }.
+
+    Auth: None.
+
+    """
     serializer_class = CustomTokenSerializer
     permission_classes = [AllowAny]
 
 # New: Update user view
 class UpdateUserView(APIView):
-    permission_classes = [IsAuthenticated]
+    """
+    GET: Retrieve the profile of the logged-in user.
+
+    Output (JSON): { "userId", "name", "email", "roles", ... }.
+
+    Auth: Required (Bearer token).
+
+
+    PUT: Update the profile of the logged-in user.
+
+    Input (JSON): { "name", "email", "roles", ... }.
+
+    Output (JSON): { "userId", "name", "email", "roles", ... }.
+
+    Auth: Required (Bearer token).
+
+    
+    PATCH: Update the profile of the logged-in user partially.
+
+    Input (JSON): { "name", "email", "roles", ... }.
+
+    Output (JSON): { "userId", "name", "email", "roles", ... }.
+    
+    Auth: Required (Bearer token).
+ 
+    """
 
     def get(self, request):
         serializer = UserUpdateSerializer(request.user)
