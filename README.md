@@ -3,44 +3,86 @@
 **AkibaPamoja** is a backend REST API built with Django and Django REST Framework, designed to digitize and streamline the management of *chamas* (informal savings/investment groups) in Kenya.
 
 
-# AkibaPamoja Backend Setup Instructions
-1. Clone the repo (do not fork) by running `git clone https://github.com/Akiba_backend/`
+## 🛠️ Setup Instructions
 
-2. Ensure that you have installed PostgreSQL and that it is running
+### 1. Clone the repository and navigate to the folder with the project.
+  ```sql
+    git clone https://github.com/MastercraftHq/akibapamoja-backend.git
+    cd akibapamoja-backend.git
+  ```
 
-3. Copy the `.env-example` file to `.env` file and change the secret key (At present we can keep the database parameters for localhost testing)
+### 2. Create a virtual environment and activate it:
+  ```sql
+    For windows.
+    python -m venv venv
+    venv/Scripts/activate
 
-4. Create a virtual environment folder outside the github local repo NB: You may create the virtual environment folder inside the github local repo but you have to update the .gitignore to ignore the folder (`python -m venv .venv`)
+    Others.
+    python3 -m venv venv
+    source venv/Scripts/activate - Git Bash
+  ```
 
-5. Activate your virtual environment (`. .venv/bin/activate`)
+### 3. Install the required packages/libraries:
+  ```sql
+    pip install -r requirements.txt
+  ```
 
-6. Install packages by running `pip install -r requirements.txt`
+### 4. Set Up Environment Variables
+  - Copy .env.example and rename it to .env.
+  - Open .env and fill in the required values, especially SECRET_KEY, DEBUG, and database credentials.
+  - Generate a secure secret key:
+  ```sql
+    python -c "import secrets; print(secrets.token_urlsafe(32))"
+  ```
+### 5. Set Up PostgreSQL
+5.1 Login to PostgreSQL:
+  ```sql
+    psql -U postgres
+  ```
+  - If it asks for a password, enter the one you set during installation.
 
-7. Create the database in PostgreSQL:
-    - `sudo -u postgres psql`
-    - `CREATE DATABASE akiba;`
-    - `CREATE USER akiba WITH PASSWORD 'akiba';`
-    - `ALTER ROLE akiba SET client_encoding TO 'utf8'`
-    - `ALTER ROLE akiba SET default_transaction_isolation TO 'read committed';`
-    - `ALTER ROLE akiba SET timezone TO 'Africa/Nairobi';`
-    - `GRANT ALL PRIVILEGES ON DATABASE akiba TO akiba;`
-    - `\q`
+5.2 Inside the PostgreSQL shell, run:
+```sql
+    -- Create the database
+    CREATE DATABASE akiba;
 
-8. `./manage.py makemigration`
+    -- Create a dedicated user with a secure password
+    CREATE USER akiba WITH PASSWORD 'akiba';
 
-9. `./manage.py migrate`
+    -- Set recommended environment defaults for the user
+    ALTER ROLE akiba SET client_encoding TO 'utf8';
+    ALTER ROLE akiba SET default_transaction_isolation TO 'read committed';
+    ALTER ROLE akiba SET timezone TO 'Africa/Nairobi';
 
-10. To start the local host server run `python3 manage.py runserver`
+    -- Grant full access to the new database
+    GRANT ALL PRIVILEGES ON DATABASE akiba TO akiba;
 
-11. Ensure you access the website via http://127.0.0.1:8000 so that session auth works correctly
+    -- Exit psql
+    \q
 
-# Contributing to the codebase
-By default always create a new branch from dev i.e. git checkout -b feature/your_name
-Once your work is done, push your code to remote branch and create PR
-All merge conflicts are solved using git rebase to preserve linear history
+  ```
+    
+### 6.  Run Migrations
+  ```sql
+    python manage.py makemigrations
+    python manage.py migrate
+  ```
+
+### 7. Start the Development Server    
+  ```sql
+    python manage.py runserver
+  ```
+  - The documentation is on [127.0.0.0:8000](http://127.0.0.1:8000/)
+
+### 🤝 Contributing
+ ```sql
+    git checkout -b feature/your_name
+  ```
+- Push your branch and open a Pull Request (PR).
+- Use git rebase to resolve conflicts and maintain a clean commit history.
 
 
-## 🚀 Features
+### 🚀 Features
 
 - 🧑‍🤝‍🧑 **User Management** – Signup, login, and role-based access (admin, treasurer, member)
 - 🏘 **Group Management** – Create and manage chamas, invite and remove members
