@@ -2,12 +2,14 @@ from rest_framework import generics, status
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from django.shortcuts import get_object_or_404
-from django.conf import settings
 from rest_framework.exceptions import PermissionDenied
+from django.contrib.auth import get_user_model
 
 from .models import Chama, Membership
 from .serializers import ChamaSerializer, MembershipSerializer
 from .permissions import IsChamaAdmin, IsChamaMember
+
+User = get_user_model()
 
 
 class ChamaCreateView(generics.CreateAPIView):
@@ -23,10 +25,12 @@ class ChamaCreateView(generics.CreateAPIView):
             status=Membership.Status.ACTIVE
         )
 
+
 class ChamaDetailView(generics.RetrieveAPIView):
     serializer_class = ChamaSerializer
     queryset = Chama.objects.all()
     permission_classes = [IsAuthenticated]
+
 
 class AddMemberView(generics.CreateAPIView):
     serializer_class = MembershipSerializer
@@ -35,10 +39,9 @@ class AddMemberView(generics.CreateAPIView):
     def create(self, request, *args, **kwargs):
         chama = get_object_or_404(Chama, id=kwargs['groupId'])
 
-        # Get invitee
         email = request.data.get('email')
         role = request.data.get('role', Membership.Role.MEMBER)
-        user = get_object_or_404(settings.AUTH_USER_MODEL, email=email)
+        user = get_object_or_404(User, email=email)
 
         membership, created = Membership.objects.get_or_create(
             user=user,
@@ -54,8 +57,5 @@ class ListMembersView(generics.ListAPIView):
     permission_classes = [IsAuthenticated, IsChamaMember]
 
     def get_queryset(self):
-        chama = get_object_or_404(Chama, id=self.kwargs['groupID'])
-
-        def get_queryset(self):
-            chama = get_object_or_404(Chama, id=self.kwargs['groupID'])
-            return Membership.objects.filter(chama=chama)
+        chama = get_object_or_404(Chama, id=self.kwargs['groupId'])
+        return Membership.objects.filter(chama=chama)
