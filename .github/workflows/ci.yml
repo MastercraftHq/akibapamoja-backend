@@ -2,9 +2,9 @@ name: Django CI
 
 on:
   push:
-    branches: [ main, dev ]
+    branches: [main, dev]
   pull_request:
-    branches: [ main, dev ]
+    branches: [main, dev]
 
 jobs:
   test:
@@ -31,9 +31,9 @@ jobs:
       DB_PASSWORD: postgres
       DB_HOST: localhost
       DB_PORT: 5432
-      DEBUG: True
       SECRET_KEY: dummysecretkey
-      DJANGO_SETTINGS_MODULE: akibapamoja_backend.settings
+      DEBUG: True
+      DJANGO_SETTINGS_MODULE: core.settings
 
     steps:
     - name: Checkout code
@@ -43,6 +43,14 @@ jobs:
       uses: actions/setup-python@v4
       with:
         python-version: '3.11'
+
+    - name: Cache pip
+      uses: actions/cache@v3
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-pip-
 
     - name: Install dependencies
       run: |

@@ -78,7 +78,7 @@
  ```sql
     git checkout -b feature/your_name
     git add .
-    git commit -m "✨ Add <feature/your-name> - short description"
+    git commit -m " Add <feature/your-name> - short description"
     git pull origin dev --rebase
     git push origin feature/<your-branch-name>
   ```
