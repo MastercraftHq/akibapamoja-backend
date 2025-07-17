@@ -3,9 +3,11 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.response import Response
 from django.views.decorators.csrf import csrf_exempt
+from django.shortcuts import get_object_or_404
 
 from .models import Contribution, ActivityLog
-from .serializers import ContributionSerializer
+from chama.models import Chama, Membership
+from .serializers import ContributionSerializer, ContributionCreateSerializer
 from .permissions import IsChamaMember
 from .utils import get_user_by_phone, get_chama_for_user
 
@@ -16,33 +18,59 @@ class ContributionViewSet(viewsets.ModelViewSet):
     ordering           = ['-created_at']
 
     def get_queryset(self):
-        user = self.request.user
-        qs = Contribution.objects.filter(chama__membership__user=user)
         chama_id = self.request.query_params.get('chama')
-        if chama_id:
-            qs = qs.filter(chama_id=chama_id)
-        return qs
-
+        chama = get_object_or_404(Chama, id=chama_id) if chama_id else None
+        
+        # Ensure user is a member of the chama
+        if chama and not Membership.objects.filter(user=self.request.user, chama=chama).exists():
+            raise PermissionDenied("You are not a member of this Chama.")
+        
+        # Regular memebers can only see their contributions
+        # Admins and treasurers can see all contributions in the chama
+        if chama and self.request.user.is_staff:
+            return Contribution.objects.filter(chama=chama).select_related('user', 'schedule').order_by('-transaction_date')
+        else:
+            return Contribution.objects.filter(
+                chama=chama,
+                user=self.request.user
+            ).select_related('schedule').order_by('-transaction_date') if chama else Contribution.objects.none()
+    
+    def get_serializer_class(self):
+        if self.action == 'create':
+            return ContributionCreateSerializer
+        return ContributionSerializer
+    
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        # Get chama_id from URL kwargs, then from query params
+        chama_id = self.kwargs.get('chama_id') or self.request.query_params.get('chama')
+        context['chama'] = get_object_or_404(Chama, id=chama_id) if chama_id else None
+        return context
+    
+    # Create a manual contribution
     def perform_create(self, serializer):
-        chama = serializer.validated_data['chama']
-        user  = self.request.user
-        if not chama.membership_set.filter(user=user).exists():
-            raise PermissionDenied("You are not a member of this chama.")
-
-        contribution = serializer.save(user=user)
-
+        chama = self.get_serializer_context().get('chama')
+        if not chama:
+            raise PermissionDenied("Chama not found.")
+        
+        # Ensure user is a member of the chama
+        if not Membership.objects.filter(user=self.request.user, chama=chama).exists():
+            raise PermissionDenied("You are not a member of this Chama.")
+        
+        contribution = serializer.save(user=self.request.user, chama=chama, status='SUCCESS')
+        
         # Update chama balance
         chama.balance += contribution.amount
         chama.save()
-
+        
         # Log the activity
         ActivityLog.objects.create(
-            user=user,
+            user=self.request.user,
             chama=chama,
             action='CONTRIBUTION',
-            details=f"{user.username} contributed KES {contribution.amount}"
+            details=f"Manual contribution of {serializer.validated_data['amount']} KES"
         )
-
+        
 @csrf_exempt
 @api_view(['POST'])
 @permission_classes([])

@@ -1,5 +1,7 @@
 from rest_framework import serializers
-from .models import Contribution
+from django.utils import timezone
+from django.db import models
+from .models import Contribution, ContributionCycle, ContributionSchedule
 
 class ContributionSerializer(serializers.ModelSerializer):
     
@@ -21,4 +23,58 @@ class ContributionSerializer(serializers.ModelSerializer):
         
         def create(self, validated_data):
             validated_data["user"] = self.context["request"].user
+            validated_data["chama"] = self.context["chama"]
             return super().create(validated_data)
+        
+class ContributionScheduleSerializer(serializers.ModelSerializer):
+    user = serializers.ReadOnlyField(source="user.id")
+    is_overdue = serializers.SerializerMethodField()
+    amount_paid = serializers.SerializerMethodField()
+    amount_remaining = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = ContributionSchedule
+        fields = [
+            'id', 'user', 'due_date', 'expected_amount',
+            'status', 'chama', 'is_overdue', 'amount_paid',
+            'amount_remaining', 'created_at'
+        ]
+        
+    def get_is_overdue(self, obj):
+        return obj.due_date < timezone.now().date() and obj.status in ['PENDING', 'PARTIAL']
+    
+    def get_amount_paid(self, obj):
+        contributions = Contribution.objects.filter(
+            schedule=obj,
+            is_confirmed=True
+        ).aggregate(total=models.Sum('amount'))
+        return contributions['total'] or 0.00
+    
+    def get_amount_remaining(self, obj):
+        amount_paid = self.get_amount_paid(obj)
+        return obj.expected_amount - amount_paid if obj.expected_amount else 0.00
+    
+class ContributionCreateSerializer(serializers.ModelSerializer):
+    member_id = serializers.UUIDField()
+    
+    class Meta:
+        model = Contribution
+        fields = [
+            'member_id', 'amount', 'method', 'transaction_date',
+            'notes', 'reference'
+        ]
+        
+    def validate_member_id(self, value):
+        chama = self.context.get('chama')
+        try:
+            member = chama.members.get(id=value)
+        except chama.members.model.DoesNotExist:
+            raise serializers.ValidationError("Member does not belong to this chama.")
+        return member.id
+    def create(self, validated_data):
+        member_id = validated_data.pop('member_id')
+        chama = self.context.get('chama')
+        member = chama.members.get(id=member_id)
+        validated_data['user'] = member.user
+        validated_data['chama'] = chama
+        return super().create(validated_data)
