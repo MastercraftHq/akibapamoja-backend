@@ -2,6 +2,7 @@ from rest_framework import serializers
 from django.utils import timezone
 from django.db import models
 from .models import Contribution, ContributionCycle, ContributionSchedule
+from chama.models import Membership
 
 class ContributionSerializer(serializers.ModelSerializer):
     
@@ -20,6 +21,13 @@ class ContributionSerializer(serializers.ModelSerializer):
             if value <= 0:
                 raise serializers.ValidationError("Amount must be grater than 0")
             raise value
+        
+        def validate_member_id(self, value):
+            chama = self.context.get('chama')
+            if not Membership.objects.filter(
+                chama=chama, user=self.context['request'].user, id=value
+            ).exists():
+                raise serializers.ValidationError("Member does not belong to this chama.")
         
         def create(self, validated_data):
             validated_data["user"] = self.context["request"].user
