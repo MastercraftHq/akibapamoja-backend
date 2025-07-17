@@ -42,7 +42,7 @@ THIRD_PARTY_APPS = [
 
 LOCAL_APPS = [
     "gateways.users.apps.UsersConfig",
-    # "gateways.groups",  # Uncomment once implemented
+    "gateways.groups.apps.GroupsConfig",
     # "gateways.reports",
     # "gateways.notifications",
     # "core",

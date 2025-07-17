@@ -39,4 +39,5 @@ urlpatterns = [
     path('admin/doc/', include('django.contrib.admindocs.urls')),
     path("", schema_view.with_ui('swagger', cache_timeout=0), name='schema-swagger-ui'),
     path('api/v1/users/', include("gateways.users.urls")),
+    path('api/v1/groups/', include("gateways.groups.urls")),
 ]

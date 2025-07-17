@@ -46,15 +46,7 @@ class User(AbstractBaseUser, PermissionsMixin):
             default=UserRole.MEMBER.value
         )
         created_at = models.DateTimeField(auto_now_add=True)
-        
-        # group_id = models.ForeignKey(
-        #     'groups.Group',
-        #     on_delete=models.CASCADE,
-        #     related_name='users',
-        #     null=True,
-        #     blank=True
-        # )
-        
+
         USERNAME_FIELD = 'email'
         REQUIRED_FIELDS = ['phone']
         
