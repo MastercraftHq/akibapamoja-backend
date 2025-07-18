@@ -105,13 +105,6 @@ WSGI_APPLICATION = 'akibapamoja_backend.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
-# DATABASES = {
-#     'default': {
-#         'ENGINE': 'django.db.backends.sqlite3',
-#         'NAME': BASE_DIR / 'db.sqlite3',
-#     }
-# }
-
 # Database settings
 DATABASES = {
     'default': {
@@ -123,6 +116,14 @@ DATABASES = {
         'PORT': os.environ.get('DB_PORT'),
     }
 }
+
+# Uncomment this block if you want to use SQLite for local testing
+# DATABASES = {
+#     'default': {
+#         'ENGINE': 'django.db.backends.sqlite3',
+#         'NAME': BASE_DIR / 'db.sqlite3',
+#     }
+# }
 
 # settings.py
 AUTH_USER_MODEL = 'users.CustomUser'

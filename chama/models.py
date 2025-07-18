@@ -14,6 +14,7 @@ class Chama(models.Model):
     late_payment_fee = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     minimum_members = models.IntegerField(default=1)
     maximum_members = models.IntegerField()
+    balance = models.DecimalField(max_digits=12, decimal_places=2, default=0)
     is_active = models.BooleanField(default=True)
     created_at = models.DateField(auto_now_add=True)
     updated_at = models.DateField(auto_now=True)

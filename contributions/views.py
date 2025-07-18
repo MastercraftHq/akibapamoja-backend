@@ -18,6 +18,7 @@ class ContributionViewSet(viewsets.ModelViewSet):
     ordering           = ['-created_at']
 
     def get_queryset(self):
+        # Get chama_id from query params
         chama_id = self.request.query_params.get('chama')
         chama = get_object_or_404(Chama, id=chama_id) if chama_id else None
         
@@ -42,8 +43,8 @@ class ContributionViewSet(viewsets.ModelViewSet):
     
     def get_serializer_context(self):
         context = super().get_serializer_context()
-        # Get chama_id from URL kwargs, then from query params
-        chama_id = self.kwargs.get('chama_id') or self.request.query_params.get('chama')
+        # Get chama_id from query params
+        chama_id = self.request.query_params.get('chama')
         context['chama'] = get_object_or_404(Chama, id=chama_id) if chama_id else None
         return context
     

@@ -41,12 +41,18 @@ class Contribution(models.Model):
         BANK  = "BANK",  "Bank Transfer"
         CASH  = "CASH",  "Cash"
     
+    class Status(models.TextChoices):
+        PENDING = "PENDING", "Pending"
+        SUCCESS = "SUCCESS", "Success"
+        FAILED = "FAILED", "Failed"
+    
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     user      = models.ForeignKey(User, on_delete=models.CASCADE, related_name="contributions")
     chama     = models.ForeignKey(Chama, on_delete=models.CASCADE, related_name="contributions")
     schedule = models.ForeignKey(ContributionSchedule, on_delete=models.CASCADE, related_name="contributions", null=True, blank=True)
     amount    = models.DecimalField(max_digits=10, decimal_places=2, validators=[MinValueValidator(0.01)])
     method    = models.CharField(max_length=10, choices=PaymentMethod.choices, default=PaymentMethod.MPESA)
+    status    = models.CharField(max_length=10, choices=Status.choices, default=Status.PENDING)
     transaction_date = models.DateTimeField(default=timezone.now)
     recorded_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name="recorded_contributions")
     is_confirmed = models.BooleanField(default=False)

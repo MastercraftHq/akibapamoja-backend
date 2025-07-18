@@ -66,7 +66,7 @@ class ContributionScheduleSerializer(serializers.ModelSerializer):
         return obj.expected_amount - amount_paid if obj.expected_amount else 0.00
     
 class ContributionCreateSerializer(serializers.ModelSerializer):
-    member_id = serializers.UUIDField()
+    member_id = serializers.UUIDField(required=False)
     
     class Meta:
         model = Contribution
@@ -76,16 +76,26 @@ class ContributionCreateSerializer(serializers.ModelSerializer):
         ]
         
     def validate_member_id(self, value):
+        if value is None:
+            return None
         chama = self.context.get('chama')
         try:
             member = chama.members.get(id=value)
         except User.DoesNotExist:
             raise serializers.ValidationError("Member does not belong to this chama.")
         return member.id
+    
     def create(self, validated_data):
-        member_id = validated_data.pop('member_id')
+        member_id = validated_data.pop('member_id', None)
         chama = self.context.get('chama')
-        member = chama.members.get(id=member_id)
-        validated_data['user'] = member.user
+        
+        if member_id:
+            # Admin creating contribution for specific member
+            member = chama.members.get(id=member_id)
+            validated_data['user'] = member.user
+        else:
+            # User creating contribution for themselves
+            validated_data['user'] = self.context['request'].user
+            
         validated_data['chama'] = chama
         return super().create(validated_data)
