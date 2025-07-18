@@ -29,8 +29,7 @@ class UserViewSet(viewsets.ViewSet):
         Register a new user (Admin or Member).
         """
         serializer = RegisterSerializer(data=request.data)
-        if not serializer.is_valid():
-            raise RegistrationError(detail=serializer.errors)
+        serializer.is_valid(raise_exception=True)
 
         try:
             user = serializer.save()
@@ -54,13 +53,9 @@ class UserViewSet(viewsets.ViewSet):
         Authenticate a user and return JWT tokens.
         """
         serializer = LoginSerializer(data=request.data, context={"request": request})
-        if not serializer.is_valid():
-            raise AuthenticationError(detail=serializer.errors)
-
+        serializer.is_valid(raise_exception=True)
+        
         user = serializer.validated_data.get("user")
-        if not user:
-            raise AuthenticationError(detail="Authentication failed.")
-
         tokens = generate_tokens_for_user(user)
         return response.Response(tokens, status=status.HTTP_200_OK)
 
@@ -92,8 +87,7 @@ class MeViewSet(viewsets.ViewSet):
 
     def _save_user(self, request, partial):
         serializer = UpdateUserSerializer(request.user, data=request.data, partial=partial)
-        if not serializer.is_valid():
-            raise UpdateError(detail=serializer.errors)
+        serializer.is_valid(raise_exception=True)
 
         try:
             user = serializer.save()

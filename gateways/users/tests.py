@@ -1,15 +1,14 @@
 from rest_framework import status
 from rest_framework.test import APITestCase
 from django.urls import reverse
-
 from gateways.users.models import User
 
 
 class UserTests(APITestCase):
     def setUp(self):
-        self.register_url = reverse('users-list')
-        self.login_url = reverse('users-login')
-        self.me_url = reverse('me-list')
+        self.register_url = reverse("users-list")
+        self.login_url = reverse("users-login")
+        self.me_url = reverse("me-list")
         self.user_data = {
             "name": "Test User",
             "email": "test@example.com",
@@ -24,15 +23,39 @@ class UserTests(APITestCase):
         )
 
     # --- Registration Tests ---
-    def test_register_success(self):
+    def test_register_success_email_only(self):
+        data = {
+            "name": "EmailOnly",
+            "email": "emailonly@example.com",
+            "password": "StrongPass123"
+        }
+        response = self.client.post(self.register_url, data)
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertIn("authToken", response.data)
+
+    def test_register_success_phone_only(self):
+        data = {
+            "name": "PhoneOnly",
+            "phone": "0722222222",
+            "password": "StrongPass123"
+        }
+        response = self.client.post(self.register_url, data)
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertIn("authToken", response.data)
+
+    def test_register_success_both_email_phone(self):
         response = self.client.post(self.register_url, self.user_data)
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         self.assertIn("authToken", response.data)
 
-    def test_register_failure_missing_fields(self):
-        response = self.client.post(self.register_url, {"email": "", "password": ""})
+    def test_register_failure_missing_all_identifiers(self):
+        data = {
+            "name": "MissingAll",
+            "password": "StrongPass123"
+        }
+        response = self.client.post(self.register_url, data)
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertIn("email", response.data)
+        self.assertIn("non_field_errors", response.data)
 
     def test_register_failure_duplicate_email(self):
         self.user_data["email"] = "existing@example.com"
@@ -41,29 +64,51 @@ class UserTests(APITestCase):
         self.assertIn("email", response.data)
 
     # --- Login Tests ---
-    def test_login_success(self):
+    def test_login_success_email(self):
         response = self.client.post(self.login_url, {
-            "email": "existing@example.com",
+            "identifier": "existing@example.com",
             "password": "StrongPass123"
         })
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertIn("authToken", response.data)
 
-    def test_login_failure_invalid_credentials(self):
+    def test_login_success_phone(self):
         response = self.client.post(self.login_url, {
-            "email": "existing@example.com",
+            "identifier": "0700000000",
+            "password": "StrongPass123"
+        })
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn("authToken", response.data)
+
+    def test_login_failure_invalid_password(self):
+        response = self.client.post(self.login_url, {
+            "identifier": "existing@example.com",
             "password": "WrongPassword"
         })
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
-    def test_login_failure_missing_fields(self):
+    def test_login_failure_unknown_identifier(self):
+        response = self.client.post(self.login_url, {
+            "identifier": "unknown@example.com",
+            "password": "StrongPass123"
+        })
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_login_failure_missing_identifier_or_password(self):
         response = self.client.post(self.login_url, {})
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_login_failure_invalid_identifier_format(self):
+        response = self.client.post(self.login_url, {
+            "identifier": "invalid!@#",
+            "password": "StrongPass123"
+        })
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
     # --- Profile Tests ---
     def authenticate(self):
         response = self.client.post(self.login_url, {
-            "email": "existing@example.com",
+            "identifier": "existing@example.com",
             "password": "StrongPass123"
         })
         self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {response.data['authToken']}")
@@ -89,7 +134,7 @@ class UserTests(APITestCase):
 
     def test_partial_update_profile_success(self):
         self.authenticate()
-        patch_url = reverse('me-partial-update')
+        patch_url = reverse("me-partial-update")
         response = self.client.patch(patch_url, {
             "name": "Partial Update"
         })
