@@ -1,10 +1,11 @@
 from rest_framework import viewsets, permissions, filters
 from rest_framework.decorators import api_view, permission_classes
-from rest_framework.exceptions import PermissionDenied
+from rest_framework.exceptions import PermissionDenied, NotFound
 from rest_framework.response import Response
 from django.views.decorators.csrf import csrf_exempt
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
+from django.db import transaction
 
 from .models import Contribution, ActivityLog, ContributionSchedule
 from chama.models import Chama, Membership
@@ -70,7 +71,7 @@ class ContributionViewSet(viewsets.ModelViewSet):
             user=self.request.user,
             chama=chama,
             action='CONTRIBUTION',
-            details=f"Manual contribution of {serializer.validated_data['amount']} KES"
+            details=f"Manual contribution of KES {serializer.validated_data['amount']:.2f}"
         )
         
 @csrf_exempt
@@ -92,38 +93,65 @@ def mpesa_callback(request):
         receipt = receipt_item.get('Value')
         phone   = str(phone_item.get('Value'))
 
-        user  = get_user_by_phone(phone)
-        chama = get_chama_for_user(user)
+        # Validate required fields
+        if not all([amount, receipt, phone]):
+            return Response({'error': 'Missing required fields'}, status=400)
 
-        # Find the user's membership
-        member = Membership.objects.get(user=user, chama=chama)
+        # Prevent double-saving M-Pesa receipts
+        if Contribution.objects.filter(reference=receipt, method='MPESA').exists():
+            return Response({'message': 'Transaction already processed'}, status=200)
+
+        # Get user by phone - return 404 if not found
+        try:
+            user = get_user_by_phone(phone)
+        except Exception:
+            return Response({'error': 'User not found'}, status=404)
         
-        # Create a simple schedule for this contribution
-        schedule = ContributionSchedule.objects.create(
-            chama=chama,
-            due_date=timezone.now().date(),
-            expected_amount=amount
-        )
+        if not user:
+            return Response({'error': 'User not found'}, status=404)
+
+        try:
+            chama = get_chama_for_user(user)
+        except Exception:
+            return Response({'error': 'Chama not found for user'}, status=404)
         
-        contribution = Contribution.objects.create(
-            member=member,
-            chama=chama,
-            schedule=schedule,
-            amount=amount,
-            method='MPESA',
-            reference=receipt,
-            status='SUCCESS'
-        )
+        if not chama:
+            return Response({'error': 'Chama not found for user'}, status=404)
 
-        chama.balance += contribution.amount
-        chama.save()
+        # Use atomic transaction to ensure data consistency
+        with transaction.atomic():
+            try:
+                # Find the user's membership
+                member = Membership.objects.get(user=user, chama=chama)
+            except Membership.DoesNotExist:
+                return Response({'error': 'User is not a member of any chama'}, status=404)
+            
+            # Create a simple schedule for this contribution
+            schedule = ContributionSchedule.objects.create(
+                chama=chama,
+                due_date=timezone.now().date(),
+                expected_amount=amount
+            )
+            
+            contribution = Contribution.objects.create(
+                member=member,
+                chama=chama,
+                schedule=schedule,
+                amount=amount,
+                method='MPESA',
+                reference=receipt,
+                status='SUCCESS'
+            )
 
-        ActivityLog.objects.create(
-            user=user,
-            chama=chama,
-            action='CONTRIBUTION',
-            details=f"M-Pesa contribution of KES {amount}"
-        )
+            chama.balance += contribution.amount
+            chama.save()
+
+            ActivityLog.objects.create(
+                user=user,
+                chama=chama,
+                action='CONTRIBUTION',
+                details=f"M-Pesa contribution of KES {float(amount):.2f}"
+            )
 
         return Response({'message': 'OK'}, status=200)
     except Exception as e:
