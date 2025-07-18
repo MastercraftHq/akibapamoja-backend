@@ -9,16 +9,17 @@ User = get_user_model()
 
 class ContributionSerializer(serializers.ModelSerializer):
     
-    user = serializers.ReadOnlyField(source="user.id")
+    member = serializers.ReadOnlyField(source="member.id")
+    user = serializers.ReadOnlyField(source="member.user.id")
     status = serializers.ReadOnlyField()
 
     class Meta:
         model = Contribution
         fields = [
-            "id", "user", "chama", "amount", "method",
+            "id", "member", "user", "chama", "schedule", "amount", "method",
             "reference", "status", "notes", "created_at"
         ]
-        read_only_fields = ["id", "user", "status", "created_at"]
+        read_only_fields = ["id", "member", "user", "status", "created_at"]
 
         def validate_amount(self, value):
             if value <= 0:
@@ -34,11 +35,10 @@ class ContributionSerializer(serializers.ModelSerializer):
         
         def create(self, validated_data):
             validated_data["chama"] = self.context["chama"] 
-            validated_data["user"] = self.context["request"].user
+            validated_data["member"] = self.context["member"]
             return super().create(validated_data)
         
 class ContributionScheduleSerializer(serializers.ModelSerializer):
-    user = serializers.ReadOnlyField(source="user.id")
     is_overdue = serializers.SerializerMethodField()
     amount_paid = serializers.SerializerMethodField()
     amount_remaining = serializers.SerializerMethodField()
@@ -46,7 +46,7 @@ class ContributionScheduleSerializer(serializers.ModelSerializer):
     class Meta:
         model = ContributionSchedule
         fields = [
-            'id', 'user', 'due_date', 'expected_amount',
+            'id', 'due_date', 'expected_amount',
             'status', 'chama', 'is_overdue', 'amount_paid',
             'amount_remaining', 'created_at'
         ]
@@ -67,11 +67,12 @@ class ContributionScheduleSerializer(serializers.ModelSerializer):
     
 class ContributionCreateSerializer(serializers.ModelSerializer):
     member_id = serializers.UUIDField(required=False)
+    schedule_id = serializers.UUIDField(required=True)
     
     class Meta:
         model = Contribution
         fields = [
-            'member_id', 'amount', 'method', 'transaction_date',
+            'member_id', 'schedule_id', 'amount', 'method', 'transaction_date',
             'notes', 'reference'
         ]
         
@@ -81,21 +82,36 @@ class ContributionCreateSerializer(serializers.ModelSerializer):
         chama = self.context.get('chama')
         try:
             member = chama.members.get(id=value)
-        except User.DoesNotExist:
+        except Membership.DoesNotExist:
             raise serializers.ValidationError("Member does not belong to this chama.")
         return member.id
     
+    def validate_schedule_id(self, value):
+        chama = self.context.get('chama')
+        try:
+            schedule = chama.contribution_schedules.get(id=value)
+        except ContributionSchedule.DoesNotExist:
+            raise serializers.ValidationError("Schedule does not belong to this chama.")
+        return schedule.id
+    
     def create(self, validated_data):
         member_id = validated_data.pop('member_id', None)
+        schedule_id = validated_data.pop('schedule_id')
         chama = self.context.get('chama')
+        
+        # Get the schedule
+        schedule = chama.contribution_schedules.get(id=schedule_id)
+        validated_data['schedule'] = schedule
         
         if member_id:
             # Admin creating contribution for specific member
             member = chama.members.get(id=member_id)
-            validated_data['user'] = member.user
+            validated_data['member'] = member
         else:
             # User creating contribution for themselves
-            validated_data['user'] = self.context['request'].user
+            user = self.context['request'].user
+            member = chama.members.get(user=user)
+            validated_data['member'] = member
             
         validated_data['chama'] = chama
         return super().create(validated_data)

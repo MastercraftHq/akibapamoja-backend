@@ -17,7 +17,6 @@ class ContributionSchedule(models.Model):
     
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     chama = models.ForeignKey(Chama, on_delete=models.CASCADE, related_name="contribution_schedules")
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="contribution_schedules")
     due_date = models.DateField()
     expected_amount = models.DecimalField(max_digits=10, decimal_places=2)
     status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='PENDING')
@@ -26,14 +25,14 @@ class ContributionSchedule(models.Model):
     
     class Meta:
         db_table = 'contribution_schedule'
-        unique_together = ['chama', 'user', 'due_date']
+        unique_together = ['chama', 'due_date']
         indexes = [
             models.Index(fields=['due_date', 'status']),
             models.Index(fields=['chama', 'due_date']),
         ]
         
     def __str__(self):
-        return f"{self.chama.name} - {self.user.username} - {self.due_date} - {self.expected_amount} ({self.status})"
+        return f"{self.chama.name} - {self.due_date} - {self.expected_amount} ({self.status})"
 
 class Contribution(models.Model):
     class PaymentMethod(models.TextChoices):
@@ -47,9 +46,10 @@ class Contribution(models.Model):
         FAILED = "FAILED", "Failed"
     
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    user      = models.ForeignKey(User, on_delete=models.CASCADE, related_name="contributions")
+    member    = models.ForeignKey('chama.Membership', on_delete=models.CASCADE, related_name="contributions", null=True)
     chama     = models.ForeignKey(Chama, on_delete=models.CASCADE, related_name="contributions")
-    schedule = models.ForeignKey(ContributionSchedule, on_delete=models.CASCADE, related_name="contributions", null=True, blank=True)
+    schedule  = models.ForeignKey(ContributionSchedule, on_delete=models.CASCADE, related_name="contributions", null=True)
+    contribution_cycle = models.ForeignKey('ContributionCycle', on_delete=models.SET_NULL, null=True, blank=True, related_name="contributions")
     amount    = models.DecimalField(max_digits=10, decimal_places=2, validators=[MinValueValidator(0.01)])
     method    = models.CharField(max_length=10, choices=PaymentMethod.choices, default=PaymentMethod.MPESA)
     status    = models.CharField(max_length=10, choices=Status.choices, default=Status.PENDING)
@@ -64,15 +64,15 @@ class Contribution(models.Model):
 
     class Meta:
         db_table = 'contribution'
-        unique_together = ['user', 'chama', 'transaction_date']
         indexes = [
             models.Index(fields=['chama', 'transaction_date']),
-            models.Index(fields=['user', 'transaction_date']),
+            models.Index(fields=['member', 'transaction_date']),
         ]
         ordering = ["-created_at"]
 
     def __str__(self):
-        return f"{self.user.username} - {self.chama.name} - {self.amount} ({self.method}) on {self.transaction_date}"
+        member_name = self.member.user.username if self.member else "Unknown"
+        return f"{member_name} - {self.chama.name} - {self.amount} ({self.method}) on {self.transaction_date}"
 
 class ActivityLog(models.Model):
     ACTION_CHOICES = [
@@ -96,8 +96,6 @@ class ContributionCycle(models.Model):
     cycle_number = models.PositiveIntegerField()
     start_date = models.DateField()
     end_date = models.DateField()
-    expected_total = models.DecimalField(max_digits=12, decimal_places=2, validators=[MinValueValidator(0.01)], default=0.00)
-    collected_total = models.DecimalField(max_digits=12, decimal_places=2, validators=[MinValueValidator(0.00)], default=0.00)
     is_completed = models.BooleanField(default=False)
     completed_at = models.DateTimeField(null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -110,6 +108,16 @@ class ContributionCycle(models.Model):
             models.Index(fields=['chama', 'start_date']),
             models.Index(fields=['is_completed']),
         ]
-        
+
+    @property
+    def expected_total(self):
+        active_members = self.chama.members.filter(status='active').count()
+        amount_per_schedule = self.chama.contribution_amount
+        return active_members * amount_per_schedule
+
+    @property
+    def collected_total(self):
+        return self.contributions.aggregate(total=models.Sum('amount'))['total'] or 0.00
+
     def __str__(self):
         return f"{self.chama.name} - Cycle {self.cycle_number} ({self.start_date} to {self.end_date})"

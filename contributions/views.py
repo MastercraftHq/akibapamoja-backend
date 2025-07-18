@@ -4,8 +4,9 @@ from rest_framework.exceptions import PermissionDenied
 from rest_framework.response import Response
 from django.views.decorators.csrf import csrf_exempt
 from django.shortcuts import get_object_or_404
+from django.utils import timezone
 
-from .models import Contribution, ActivityLog
+from .models import Contribution, ActivityLog, ContributionSchedule
 from chama.models import Chama, Membership
 from .serializers import ContributionSerializer, ContributionCreateSerializer
 from .permissions import IsChamaMember
@@ -29,11 +30,11 @@ class ContributionViewSet(viewsets.ModelViewSet):
         # Regular memebers can only see their contributions
         # Admins and treasurers can see all contributions in the chama
         if chama and self.request.user.is_staff:
-            return Contribution.objects.filter(chama=chama).select_related('user', 'schedule').order_by('-transaction_date')
+            return Contribution.objects.filter(chama=chama).select_related('member__user', 'schedule').order_by('-transaction_date')
         else:
             return Contribution.objects.filter(
                 chama=chama,
-                user=self.request.user
+                member__user=self.request.user
             ).select_related('schedule').order_by('-transaction_date') if chama else Contribution.objects.none()
     
     def get_serializer_class(self):
@@ -58,7 +59,7 @@ class ContributionViewSet(viewsets.ModelViewSet):
         if not Membership.objects.filter(user=self.request.user, chama=chama).exists():
             raise PermissionDenied("You are not a member of this Chama.")
         
-        contribution = serializer.save(user=self.request.user, chama=chama, status='SUCCESS')
+        contribution = serializer.save(chama=chama, status='SUCCESS')
         
         # Update chama balance
         chama.balance += contribution.amount
@@ -94,9 +95,20 @@ def mpesa_callback(request):
         user  = get_user_by_phone(phone)
         chama = get_chama_for_user(user)
 
-        contribution = Contribution.objects.create(
-            user=user,
+        # Find the user's membership
+        member = Membership.objects.get(user=user, chama=chama)
+        
+        # Create a simple schedule for this contribution
+        schedule = ContributionSchedule.objects.create(
             chama=chama,
+            due_date=timezone.now().date(),
+            expected_amount=amount
+        )
+        
+        contribution = Contribution.objects.create(
+            member=member,
+            chama=chama,
+            schedule=schedule,
             amount=amount,
             method='MPESA',
             reference=receipt,
