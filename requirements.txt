@@ -6,11 +6,10 @@ autobahn==24.4.2
 Automat==25.4.16
 beautifulsoup4==4.13.4
 billiard==4.2.1
-blivet==3.12.1
-blivet-gui==2.6.0
+# blivet and blivet-gui removed - system packages not available in PyPI
 boto3==1.38.46
 botocore==1.38.46
-Brlapi==0.8.6
+# Brlapi removed - system package not available in PyPI
 celery==5.5.3
 cffi==1.17.1
 channels==4.2.2
@@ -19,18 +18,17 @@ click-didyoumean==0.3.1
 click-plugins==1.1.1.2
 click-repl==0.3.0
 constantly==23.10.4
-crypt_r==3.13.1
+# crypt_r removed - system package not available in PyPI
 cryptography==45.0.5
-cupshelpers==1.0
+# cupshelpers removed - system package not available in PyPI
 daphne==4.2.1
-dasbus==1.7
-dbus-python==1.3.2
+# dasbus and dbus-python removed - system packages not available in PyPI
 dbus_next==0.2.3
 distro==1.9.0
 Django==5.2.4
 djangorestframework==3.16.0
 djangorestframework_simplejwt==5.5.0
-dnf==4.23.0
+# dnf removed - system package not available in PyPI
 dotenv==0.9.9
 drf-nested-routers==0.94.2
 file-magic==0.4.0
@@ -43,17 +41,14 @@ jmespath==1.0.1
 jsonschema==4.23.0
 jsonschema-specifications==2024.10.1
 kombu==5.5.4
-langtable==0.0.68
-libcomps==0.1.21
-libdnf==0.74.0
-louis==3.33.0
+# langtable, libcomps, libdnf, and louis removed - system packages not available in PyPI
 lxml==5.3.2
 mercurial==6.9.5
-nftables==0.1
+# nftables removed - system package not available in PyPI
 oauthlib==3.3.1
 olefile==0.47
 packaging==24.2
-perf==0.1
+# perf removed - system package not available in PyPI
 pexpect==4.9.0
 pid==2.2.3
 pillow==11.3.0
@@ -62,26 +57,24 @@ productmd==1.45
 prompt_toolkit==3.0.51
 psycopg2-binary==2.9.10
 ptyprocess==0.7.0
-pwquality==1.4.5
+# pwquality removed - system package not available in PyPI
 pyasn1==0.6.1
 pyasn1_modules==0.4.2
-pycairo==1.25.1
+# pycairo removed - system package not available in PyPI
 pycparser==2.20
-pycups==2.0.4
+# pycups removed - system package not available in PyPI
 pyenchant==3.2.2
-PyGObject==3.50.0
+# PyGObject removed - system package not available in PyPI
 pyinotify==0.9.6
 PyJWT==2.9.0
-pykickstart==3.62
+# pykickstart removed - system package not available in PyPI
 pyOpenSSL==25.1.0
-pyparted==3.13.0
+# pyparted removed - system package not available in PyPI
 PySocks==1.7.1
-python-augeas==1.1.0
+# python-augeas removed - system package not available in PyPI
 python-dateutil==2.8.2
 python-dotenv==1.1.1
-python-linux-procfs==0.7.3
-python-meh==0.52
-python-pam==2.0.2
+# python-linux-procfs, python-meh, and python-pam removed - system packages not available in PyPI
 pyudev==0.24.3
 pyxdg==0.27
 PyYAML==6.0.2
@@ -95,21 +88,21 @@ requests-file==2.0.0
 requests-ftp==0.3.1
 requests-oauthlib==2.0.0
 rpds-py==0.25.0
-rpm==4.20.1
+# rpm removed - system package not available in PyPI
 s3transfer==0.13.0
 # selinux removed - was referencing local system path
 # sepolicy removed - was referencing local system path
 service-identity==24.2.0
-setools==4.5.1
+# setools removed - system package not available in PyPI
 # setroubleshoot removed - was referencing local system path
 setuptools==74.1.3
 simpleaudio==1.0.4
-simpleline==1.9.0
+# simpleline removed - system package not available in PyPI
 six==1.17.0
-sos==4.9.1
+# sos removed - system package not available in PyPI
 soupsieve==2.7
 sqlparse==0.5.3
-systemd-python==235
+# systemd-python removed - system package not available in PyPI
 Twisted==25.5.0
 txaio==25.6.1
 typing_extensions==4.14.1
@@ -117,5 +110,5 @@ tzdata==2025.2
 urllib3==2.3.0
 vine==5.1.0
 wcwidth==0.2.13
-xkbregistry==0.3
+# xkbregistry removed - system package not available in PyPI
 zope.interface==7.2
