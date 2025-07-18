@@ -3,7 +3,7 @@ from rest_framework.routers import DefaultRouter
 from gateways.users.views import UserViewSet, MeViewSet
 
 router = DefaultRouter()
-router.register(r'users', UserViewSet, basename='users')
+router.register(r'auth', UserViewSet, basename='auth')
 router.register(r'me', MeViewSet, basename='me')
 
 urlpatterns = [
