@@ -1,0 +1,20 @@
+# 📝 Commit Summary (Use present tense: “Add feature”, not “Added” or “Adds”)
+<type>: <short description>
+
+# Example:
+# feat: add JWT login support with identifier flexibility
+
+---
+
+### Checklist
+- [ ] Code compiles and runs
+- [ ] Unit/Integration tests pass
+- [ ] Linter runs clean
+- [ ] Added/updated documentation
+- [ ] Follows naming and structure conventions
+- [ ] No hardcoded secrets or debug logs
+
+---
+
+# 💬 Details (Optional)
+# Describe the reasoning, issues fixed, or decisions made.
