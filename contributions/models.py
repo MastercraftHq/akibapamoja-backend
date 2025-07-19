@@ -42,8 +42,8 @@ class Contribution(models.Model):
     
     class Status(models.TextChoices):
         PENDING = "PENDING", "Pending"
-        SUCCESS = "SUCCESS", "Success"
-        FAILED = "FAILED", "Failed"
+        SUCCESS = "APPROVED", "Approved"
+        FAILED = "DECLINED", "Declined"
     
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     member    = models.ForeignKey('chama.Membership', on_delete=models.CASCADE, related_name="contributions", null=True)
