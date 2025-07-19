@@ -30,8 +30,7 @@ class ContributionEndpointTests(TestCase):
             contribution_frequency='monthly',
             contribution_day=1,
             currency='USD',
-            maximum_members=10,
-            balance=0
+            maximum_members=10
         )
         self.membership_user = Membership.objects.create(
             user=self.user1, chama=self.chama, role='member', status='active'
