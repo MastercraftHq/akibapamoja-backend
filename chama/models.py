@@ -63,6 +63,7 @@ class Membership(models.Model):
 
     class Meta:
         unique_together = ['user', 'chama']
+        ordering = ['created_at'] 
 
     def __str__(self):
         return f"{self.user} in {self.chama} as {self.role}"
