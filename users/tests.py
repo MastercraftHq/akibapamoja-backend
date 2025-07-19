@@ -3,14 +3,14 @@ from rest_framework.test import APITestCase
 from django.urls import reverse
 from users.models import User
 
-
 class UserTests(APITestCase):
     def setUp(self):
-        self.register_url = reverse("users-list")
-        self.login_url = reverse("users-login")
-        self.me_url = reverse("me-list")
+        self.register_url = reverse("auth-list")
+        self.login_url = reverse("auth-login")
+        self.me_url = reverse("me-profile")
         self.user_data = {
-            "name": "Test User",
+            "first_name": "Test",
+            "last_name": "User",
             "email": "test@example.com",
             "phone": "0712345678",
             "password": "StrongPass123"
@@ -18,14 +18,16 @@ class UserTests(APITestCase):
         self.user = User.objects.create_user(
             email="existing@example.com",
             phone="0700000000",
-            name="Existing",
+            first_name="Existing",
+            last_name="User",
             password="StrongPass123"
         )
 
     # --- Registration Tests ---
     def test_register_success_email_only(self):
         data = {
-            "name": "EmailOnly",
+            "first_name": "Email",
+            "last_name": "Only",
             "email": "emailonly@example.com",
             "password": "StrongPass123"
         }
@@ -35,7 +37,8 @@ class UserTests(APITestCase):
 
     def test_register_success_phone_only(self):
         data = {
-            "name": "PhoneOnly",
+            "first_name": "Phone",
+            "last_name": "Only",
             "phone": "0722222222",
             "password": "StrongPass123"
         }
@@ -50,7 +53,8 @@ class UserTests(APITestCase):
 
     def test_register_failure_missing_all_identifiers(self):
         data = {
-            "name": "MissingAll",
+            "first_name": "Missing",
+            "last_name": "All",
             "password": "StrongPass123"
         }
         response = self.client.post(self.register_url, data)
@@ -126,20 +130,21 @@ class UserTests(APITestCase):
     def test_update_profile_success(self):
         self.authenticate()
         response = self.client.put(self.me_url, {
-            "name": "Updated User",
+            "first_name": "Updated",
+            "last_name": "User",
             "phone": "0799999999"
         })
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response.data["user"]["name"], "Updated User")
+        self.assertEqual(response.data["phone"], "0799999999")
+        self.assertEqual(response.data["first_name"], "Updated")
 
     def test_partial_update_profile_success(self):
         self.authenticate()
-        patch_url = reverse("me-partial-update")
-        response = self.client.patch(patch_url, {
-            "name": "Partial Update"
+        response = self.client.patch(self.me_url, {
+            "first_name": "Partial"
         })
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response.data["user"]["name"], "Partial Update")
+        self.assertEqual(response.data["first_name"], "Partial")
 
     def test_update_profile_invalid_data(self):
         self.authenticate()
