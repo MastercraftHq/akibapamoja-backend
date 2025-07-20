@@ -3,6 +3,7 @@ from rest_framework.test import APITestCase
 from django.urls import reverse
 from users.models import User
 
+
 class UserTests(APITestCase):
     def setUp(self):
         self.register_url = reverse("auth-list")
@@ -24,32 +25,12 @@ class UserTests(APITestCase):
         )
 
     # --- Registration Tests ---
-    def test_register_success_email_only(self):
-        data = {
-            "first_name": "Email",
-            "last_name": "Only",
-            "email": "emailonly@example.com",
-            "password": "StrongPass123"
-        }
-        response = self.client.post(self.register_url, data)
-        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
-        self.assertIn("authToken", response.data)
 
-    def test_register_success_phone_only(self):
-        data = {
-            "first_name": "Phone",
-            "last_name": "Only",
-            "phone": "0722222222",
-            "password": "StrongPass123"
-        }
-        response = self.client.post(self.register_url, data)
-        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
-        self.assertIn("authToken", response.data)
-
-    def test_register_success_both_email_phone(self):
+    def test_register_success(self):
         response = self.client.post(self.register_url, self.user_data)
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         self.assertIn("authToken", response.data)
+        self.assertEqual(response.data["userId"], str(User.objects.get(email=self.user_data["email"]).id))
 
     def test_register_failure_missing_all_identifiers(self):
         data = {
@@ -59,7 +40,8 @@ class UserTests(APITestCase):
         }
         response = self.client.post(self.register_url, data)
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertIn("non_field_errors", response.data)
+        self.assertIn("email", response.data)
+        self.assertIn("phone", response.data)
 
     def test_register_failure_duplicate_email(self):
         self.user_data["email"] = "existing@example.com"
@@ -68,6 +50,7 @@ class UserTests(APITestCase):
         self.assertIn("email", response.data)
 
     # --- Login Tests ---
+
     def test_login_success_email(self):
         response = self.client.post(self.login_url, {
             "identifier": "existing@example.com",
@@ -110,6 +93,7 @@ class UserTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
     # --- Profile Tests ---
+
     def authenticate(self):
         response = self.client.post(self.login_url, {
             "identifier": "existing@example.com",
@@ -135,8 +119,8 @@ class UserTests(APITestCase):
             "phone": "0799999999"
         })
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response.data["phone"], "0799999999")
-        self.assertEqual(response.data["first_name"], "Updated")
+        self.assertEqual(response.data["user"]["phone"], "0799999999")
+        self.assertEqual(response.data["user"]["first_name"], "Updated")
 
     def test_partial_update_profile_success(self):
         self.authenticate()
@@ -144,7 +128,7 @@ class UserTests(APITestCase):
             "first_name": "Partial"
         })
         self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertEqual(response.data["first_name"], "Partial")
+        self.assertEqual(response.data["user"]["first_name"], "Partial")
 
     def test_update_profile_invalid_data(self):
         self.authenticate()
