@@ -5,10 +5,11 @@ class IsChamaMember(permissions.BasePermission):
     """Only members of the chama can create / view contributions."""
 
     def _is_member(self, user, chama_id):
-        return Chama.objects.filter(
-            id=chama_id,
-            members__user=user
-        ).exists()
+        try:
+            chama = Chama.objects.get(id=chama_id)
+            return Membership.objects.filter(user=user, chama=chama).exists()
+        except (ValueError, Chama.DoesNotExist):
+            return True
 
     def has_permission(self, request, view):
         # Get chama_id from query params or request data
