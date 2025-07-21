@@ -1,4 +1,3 @@
-# gateways/users/validators.py
 import re
 from rest_framework import serializers
 from users.models import User
@@ -21,10 +20,9 @@ def validate_required_email_and_phone(attrs):
     email = attrs.get("email")
     phone = attrs.get("phone")
 
-    if not email:
-        raise serializers.ValidationError({"email": "Email is required."})
-    if not phone:
-        raise serializers.ValidationError({"phone": "Phone number is required."})
+    if not email and not phone:
+        raise serializers.ValidationError("Either email or phone number is required.")
+
     return attrs
 
 def validate_identifier(identifier: str) -> bool:

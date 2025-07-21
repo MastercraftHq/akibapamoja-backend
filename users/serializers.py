@@ -1,14 +1,22 @@
+from django.db import transaction
 from rest_framework import serializers
 from django.contrib.auth import authenticate
 from users.models import User, Profile
 from users.enums import UserRole
-from users.validators import is_email, validate_unique_email, validate_unique_phone, validate_required_email_and_phone
+from users.validators import (
+    is_email,
+    validate_unique_email,
+    validate_unique_phone,
+    validate_required_email_and_phone,
+)
+
 
 class ProfileSerializer(serializers.ModelSerializer):
     class Meta:
         model = Profile
         fields = ["bio", "avatar"]
-        
+
+
 class UserSerializer(serializers.ModelSerializer):
     profile = ProfileSerializer(required=False)
 
@@ -19,7 +27,8 @@ class UserSerializer(serializers.ModelSerializer):
             "created_at", "profile"
         ]
         read_only_fields = ["id", "role", "created_at"]
-        
+
+
 class RegisterSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True, min_length=8)
     email = serializers.EmailField(validators=[validate_unique_email])
@@ -28,39 +37,46 @@ class RegisterSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         fields = ["first_name", "last_name", "email", "phone", "password"]
-        
+
     def validate(self, attrs):
         return validate_required_email_and_phone(attrs)
-    
+
+    @transaction.atomic
     def create(self, validated_data):
         password = validated_data.pop("password")
         user = User.objects.create_user(password=password, **validated_data)
         Profile.objects.create(user=user)
         return user
 
+
 class LoginSerializer(serializers.Serializer):
-    identifier = serializers.CharField()
+    identifier = serializers.CharField(
+        required=True,
+        allow_blank=False,
+        error_messages={
+            "blank": "Identifier (email or phone) is required.",
+            "required": "Identifier (email or phone) is required."
+        }
+    )
     password = serializers.CharField()
 
     def validate(self, attrs):
         identifier = attrs.get("identifier")
         password = attrs.get("password")
 
-        if not identifier:
-            raise serializers.ValidationError("Identifier (email or phone) is required.")
-        
         user = authenticate(
             request=self.context.get("request"),
             email=identifier if is_email(identifier) else None,
             phone=identifier if not is_email(identifier) else None,
             password=password
         )
-            
+
         if not user:
             raise serializers.ValidationError("Invalid credentials.")
 
         attrs["user"] = user
         return attrs
+
 
 class UpdateUserSerializer(serializers.ModelSerializer):
     bio = serializers.CharField(required=False, allow_blank=True)
@@ -79,6 +95,7 @@ class UpdateUserSerializer(serializers.ModelSerializer):
             "role": {"read_only": True},
         }
 
+    @transaction.atomic
     def update(self, instance, validated_data):
         request = self.context.get("request")
         is_admin = request and request.user and request.user.is_staff
@@ -95,7 +112,7 @@ class UpdateUserSerializer(serializers.ModelSerializer):
                 setattr(instance, attr, validated_data[attr])
         instance.save()
 
-        # Update profile if provided
+        # Update or create profile
         profile, _ = Profile.objects.get_or_create(user=instance)
         for attr in ["bio", "avatar"]:
             if attr in validated_data:
