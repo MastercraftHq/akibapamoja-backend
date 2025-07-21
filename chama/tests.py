@@ -12,9 +12,9 @@ class ChamaEndpointsTestCase(APITestCase):
         self.client = APIClient()
 
         # Create users
-        self.admin_user = User.objects.create_user(username="admin", email="admin@example.com", password="adminpass")
-        self.member_user = User.objects.create_user(username="member", email="member@example.com", password="memberpass")
-        self.other_user = User.objects.create_user(username="outsider", email="out@example.com", password="outpass")
+        self.admin_user = User.objects.create_user(email="admin@example.com", password="adminpass")
+        self.member_user = User.objects.create_user(email="member@example.com", password="memberpass")
+        self.other_user = User.objects.create_user(email="out@example.com", password="outpass")
 
         # Log in admin user and create Chama
         self.client.force_authenticate(user=self.admin_user)

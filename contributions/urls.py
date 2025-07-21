@@ -4,7 +4,7 @@ from .views import ContributionViewSet
 
 # Simple router for contributions
 router = DefaultRouter()
-router.register(r'contributions', ContributionViewSet, basename='contributions')
+router.register(r'', ContributionViewSet, basename='contributions')
 
 urlpatterns = [
     path('', include(router.urls)),
