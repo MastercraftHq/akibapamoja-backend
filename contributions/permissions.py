@@ -2,7 +2,7 @@ from rest_framework import permissions
 from chama.models import Chama
 
 class IsChamaMember(permissions.BasePermission):
-    """Only members of the chama can create / view contributions."""
+    """Only members of the chama can create/view contributions."""
 
     def _is_member(self, user, chama_id):
         return Chama.objects.filter(
@@ -11,9 +11,10 @@ class IsChamaMember(permissions.BasePermission):
         ).exists()
 
     def has_permission(self, request, view):
-        # Get chama_id from query params or request data
+        if request.user.is_staff:
+            return True
+            
         chama_id = request.query_params.get("chama") or request.data.get("chama")
-        
         if not chama_id:
             return False
             

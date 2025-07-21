@@ -1,11 +1,11 @@
 from rest_framework.routers import DefaultRouter
 from django.urls import path, include
-from .views import ContributionViewSet
+from .views import ContributionViewSet, mpesa_callback
 
-# Simple router for contributions
 router = DefaultRouter()
 router.register(r'contributions', ContributionViewSet, basename='contributions')
 
 urlpatterns = [
     path('', include(router.urls)),
+    path('mpesa-callback/', mpesa_callback, name='mpesa-callback'),
 ]

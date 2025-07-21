@@ -47,6 +47,7 @@ class Membership(models.Model):
 
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='memberships')
     chama = models.ForeignKey('Chama', on_delete=models.CASCADE, related_name='members')
+
     
     role = models.CharField(
         max_length=20,
