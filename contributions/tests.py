@@ -11,13 +11,13 @@ User = get_user_model()
 class ContributionAPITests(APITestCase):
     def setUp(self):
         self.member = User.objects.create_user(
-            username='member', password='pass', email=f'member_{self._testMethodName}@example.com', role='user'
+            username='member', password='pass', email=f'member_{self._testMethodName}@example.com'
         )
         self.admin = User.objects.create_user(
-            username='admin', password='pass', email=f'admin_{self._testMethodName}@example.com', role='admin'
+            username='admin', password='pass', email=f'admin_{self._testMethodName}@example.com'
         )
         self.non_member = User.objects.create_user(
-            username='outsider', password='pass', email=f'outsider_{self._testMethodName}@example.com', role='user'
+            username='outsider', password='pass', email=f'outsider_{self._testMethodName}@example.com'
         )
         self.chama = Chama.objects.create(
             name='Test Chama', contribution_amount=100, contribution_day=1, maximum_members=50, contribution_frequency='monthly', currency='KES'
@@ -25,7 +25,7 @@ class ContributionAPITests(APITestCase):
         self.member_membership = Membership.objects.create(user=self.member, chama=self.chama, role=Membership.Role.MEMBER)
         self.admin_membership = Membership.objects.create(user=self.admin, chama=self.chama, role=Membership.Role.ADMIN)
         self.client = APIClient()
-        self.url = reverse('contributions-list')  # Updated to non-namespaced reverse
+        self.url = reverse('contributions-list')  
 
     def test_member_can_submit_manual_contribution(self):
         schedule = ContributionSchedule.objects.create(
