@@ -17,13 +17,13 @@ User = get_user_model()
 class ContributionAPITests(APITestCase):
     def setUp(self):
         self.member = User.objects.create_user(
-            username='member', password='pass', email=f'member_{self._testMethodName}@example.com'
+            password='pass', email=f'member_{self._testMethodName}@example.com'
         )
         self.admin = User.objects.create_user(
-            username='admin', password='pass', is_staff=True, email=f'admin_{self._testMethodName}@example.com'
+            password='pass', is_staff=True, email=f'admin_{self._testMethodName}@example.com'
         )
         self.non_member = User.objects.create_user(
-            username='outsider', password='pass', email=f'outsider_{self._testMethodName}@example.com'
+            password='pass', email=f'outsider_{self._testMethodName}@example.com'
         )
         self.chama = Chama.objects.create(name='Test Chama', contribution_amount=100, contribution_day=1, maximum_members=50)
         Membership.objects.create(user=self.member, chama=self.chama)

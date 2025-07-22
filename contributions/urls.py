@@ -3,7 +3,7 @@ from django.urls import path, include
 from .views import ContributionViewSet, mpesa_callback
 
 router = DefaultRouter()
-router.register(r'contributions', ContributionViewSet, basename='contributions')
+router.register(r'', ContributionViewSet, basename='contributions')
 
 urlpatterns = [
     path('', include(router.urls)),
