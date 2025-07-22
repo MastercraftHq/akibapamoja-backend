@@ -1,114 +1,108 @@
-from rest_framework_simplejwt.views import TokenObtainPairView
-from rest_framework.views import APIView
-from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
-from rest_framework import generics, serializers, status
-from rest_framework.permissions import AllowAny, IsAuthenticated
-from rest_framework.response import Response
-from django.shortcuts import get_object_or_404
-
-from .models import CustomUser, UserProfile
-
-from .serializers import UserSerializer, UserUpdateSerializer
+from drf_yasg.utils import swagger_auto_schema
+from rest_framework import viewsets, permissions, status, response
+from rest_framework.decorators import action
+from rest_framework.parsers import MultiPartParser, FormParser
 
 
-class CreateUserView(generics.CreateAPIView):
-    """
-    Description: Create a new user account (member or admin).
-
-    Input (JSON): name, email, password, phone, optional groupId.
-
-    Output (JSON): { "userId": "...", "authToken": "..." }.
-
-    Auth: None.
-
-    """
-    queryset = CustomUser.objects.all()
-    serializer_class = UserSerializer
-    permission_classes = [AllowAny]
-
-class CustomTokenSerializer(TokenObtainPairSerializer):
-    """
-    Serializer for custom token generation.
-
-    This serializer extends the default TokenObtainPairSerializer to include custom fields. 
-    """
-    def validate(self, attrs):
-        data = super().validate(attrs)
-        data['username'] = self.user.username
-        data['email'] = self.user.email
-        # Add more fields if needed (e.g., role, id, etc.)
-        return data
-
-class LoginView(TokenObtainPairView):
-    """
-    Description: Authenticate a user and obtain an access token.
-
-    Input (JSON): email (or phone), password.
-
-    Output (JSON): { "authToken": "...", "refreshToken": "..." }.
-
-    Auth: None.
-
-    """
-    serializer_class = CustomTokenSerializer
-    permission_classes = [AllowAny]
-
-# New: Update user view
-class UpdateUserView(APIView):
-    """
-    GET: Retrieve the profile of the logged-in user.
-
-    Output (JSON): { "userId", "name", "email", "roles", ... }.
-
-    Auth: Required (Bearer token).
+from users.models import User
+from users.serializers import (
+    RegisterSerializer,
+    LoginSerializer,
+    UserSerializer,
+    UpdateUserSerializer
+)
+from users.exceptions import (
+    RegistrationError,
+    AuthenticationError,
+    UpdateError
+)
+from users.utils import generate_tokens_for_user
 
 
-    PUT: Update the profile of the logged-in user.
+class UserViewSet(viewsets.ViewSet):
+    permission_classes = [permissions.AllowAny]
 
-    Input (JSON): { "name", "email", "roles", ... }.
+    @swagger_auto_schema(
+        request_body=RegisterSerializer,
+        responses={201: "User registered successfully.", 400: "Invalid data."}
+    )
+    def create(self, request):
+        """
+        Register a new user (Admin or Member).
+        """
+        serializer = RegisterSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
 
-    Output (JSON): { "userId", "name", "email", "roles", ... }.
+        try:
+            user = serializer.save()
+        except Exception as e:
+            raise RegistrationError(detail=str(e))
 
-    Auth: Required (Bearer token).
+        tokens = generate_tokens_for_user(user)
+        return response.Response({
+            "userId": str(user.id),
+            **tokens
+        }, status=status.HTTP_201_CREATED)
 
-    
-    PATCH: Update the profile of the logged-in user partially.
+    @swagger_auto_schema(
+        method="post",
+        request_body=LoginSerializer,
+        responses={200: "Login successful.", 400: "Invalid credentials."}
+    )
+    @action(detail=False, methods=["post"], url_path="login")
+    def login(self, request):
+        """
+        Authenticate a user and return JWT tokens.
+        """
+        serializer = LoginSerializer(data=request.data, context={"request": request})
+        serializer.is_valid(raise_exception=True)
+        
+        user = serializer.validated_data.get("user")
+        tokens = generate_tokens_for_user(user)
+        return response.Response(tokens, status=status.HTTP_200_OK)
 
-    Input (JSON): { "name", "email", "roles", ... }.
 
-    Output (JSON): { "userId", "name", "email", "roles", ... }.
-    
-    Auth: Required (Bearer token).
- 
-    """
+class MeViewSet(viewsets.ViewSet):
+    permission_classes = [permissions.IsAuthenticated]
+    parser_classes = [MultiPartParser, FormParser]  
 
-    def get(self, request):
-        serializer = UserUpdateSerializer(request.user)
-        return Response(serializer.data)
+    @swagger_auto_schema(responses={200: UserSerializer})
+    def list(self, request):
+        """
+        Retrieve current user's profile.
+        """
+        serializer = UserSerializer(request.user)
+        return response.Response(serializer.data)
 
-    def put(self, request, *args, **kwargs):
-        user = request.user
-        serializer = UserUpdateSerializer(user, data=request.data)
+    @swagger_auto_schema(request_body=UpdateUserSerializer)
+    def update(self, request, PK=None):
+        """
+        Fully update the logged-in user's profile (PUT).
+        """
+        return self._save_user(request, partial=False)
 
-        if serializer.is_valid():
-            serializer.save()
-            return Response({
-                'message': 'Your profile was updated successfully.',
-                'user': serializer.data
-            })
+    @swagger_auto_schema(request_body=UpdateUserSerializer)
+    def partial_update(self, request, PK=None):
+        """
+        Partially update the logged-in user's profile (PATCH).
+        """
+        return self._save_user(request, partial=True)
 
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+    def _save_user(self, request, partial):
+        serializer = UpdateUserSerializer(
+            request.user, 
+            data=request.data, 
+            partial=partial,
+            context={'request': request}
+            )
+        serializer.is_valid(raise_exception=True)
 
-    # same as put() since both allow partial updates
-    def patch(self, request, *args, **kwargs):
-        user = request.user
-        serializer = UserUpdateSerializer(user, data=request.data, partial=True)
+        try:
+            user = serializer.save()
+        except Exception as e:
+            raise UpdateError(detail=str(e))
 
-        if serializer.is_valid():
-            serializer.save()
-            return Response({
-                'message': 'Your profile was partially updated successfully.',
-                'user': serializer.data
-            })
-
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        return response.Response({
+            "message": "Profile updated successfully.",
+            "user": UserSerializer(user).data
+        }, status=status.HTTP_200_OK)
