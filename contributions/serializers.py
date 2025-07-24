@@ -31,6 +31,13 @@ class ContributionSerializer(serializers.ModelSerializer):
     def create(self, validated_data):
         validated_data["chama"] = self.context["chama"]
         validated_data["member"] = self.context["member"]
+
+        # Ensure payment method defaults to CASH for manual contributions
+        if not validated_data.get("method"):
+            validated_data["method"] = Contribution.PaymentMethod.CASH
+
+        validated_data["status"] = Contribution.Status.PENDING
+
         return super().create(validated_data)
 
 
@@ -53,7 +60,7 @@ class ContributionScheduleSerializer(serializers.ModelSerializer):
     def get_amount_paid(self, obj):
         total = Contribution.objects.filter(
             schedule=obj,
-            is_confirmed=True
+            status=Contribution.Status.APPROVED
         ).aggregate(total=models.Sum('amount'))['total']
         return total or 0.00
 
@@ -62,64 +69,45 @@ class ContributionScheduleSerializer(serializers.ModelSerializer):
 
 
 class ContributionCreateSerializer(serializers.ModelSerializer):
-    member_id = serializers.UUIDField(required=False)
-    schedule_id = serializers.UUIDField(required=True)
+    schedule = serializers.PrimaryKeyRelatedField(queryset=ContributionSchedule.objects.all())
+    method = serializers.ChoiceField(choices=Contribution.PaymentMethod.choices, required=False)
 
     class Meta:
         model = Contribution
-        fields = [
-            'member_id', 'schedule_id', 'amount', 'method', 'transaction_date',
-            'notes', 'reference'
-        ]
+        fields = ['schedule', 'amount', 'method']
+        extra_kwargs = {
+            'amount': {'required': True},
+            'method': {'required': False}
+        }
 
-    def validate_member_id(self, value):
-        if value is None:
-            return None
-        chama = self.context.get('chama')
-        if not chama.members.filter(id=value).exists():
-            raise serializers.ValidationError("Member does not belong to this chama.")
-        return value
-
-    def validate_schedule_id(self, value):
-        chama = self.context.get('chama')
-        if not chama.contribution_schedules.filter(id=value).exists():
-            raise serializers.ValidationError("Schedule does not belong to this chama.")
-        return value
+    def validate(self, data):
+        if data.get('method') == 'MPESA' and not data.get('reference'):
+            raise serializers.ValidationError("Reference is required for MPESA payments")
+        return data
 
     def create(self, validated_data):
-        member_id = validated_data.pop('member_id', None)
-        schedule_id = validated_data.pop('schedule_id')
         chama = self.context.get('chama')
+        user = self.context['request'].user
+        member = chama.members.get(user=user)
+        method = validated_data.get('method', 'CASH')
+        status = 'APPROVED' if method == 'MPESA' else 'PENDING'
 
-        # Get related schedule
-        schedule = chama.contribution_schedules.get(id=schedule_id)
-        validated_data['schedule'] = schedule
-
-        # Resolve member
-        if member_id:
-            member = chama.members.get(id=member_id)
-        else:
-            user = self.context['request'].user
-            member = chama.members.get(user=user)
-
-        validated_data['member'] = member
-        validated_data['chama'] = chama
-
-        return Contribution.objects.create(**validated_data)
-
+        return Contribution.objects.create(
+            member=member,
+            chama=chama,
+            schedule=validated_data['schedule'],
+            method=method,
+            status=status,
+            amount=validated_data['amount'],
+            reference=validated_data.get('reference', '')
+        )
 
 class ContributionStatusUpdateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Contribution
         fields = ['status']
-        extra_kwargs = {
-            'status': {'required': True}
-        }
 
     def validate_status(self, value):
-        valid_statuses = dict(Contribution.Status.choices)
-        if value not in valid_statuses:
-            raise serializers.ValidationError(
-                f"Invalid status. Allowed values: {', '.join(valid_statuses.keys())}"
-            )
+        if value not in ['APPROVED', 'REJECTED']:  # Now matches model
+            raise serializers.ValidationError("Invalid status. Must be 'APPROVED' or 'REJECTED'.")
         return value
