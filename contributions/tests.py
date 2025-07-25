@@ -14,6 +14,7 @@ class ContributionAPITests(APITestCase):
     def setUp(self):
         self.client = APIClient()
         self.member = User.objects.create_user(email='member@example.com', password='pass')
+        self.member.is_staff = False
         self.admin = User.objects.create_user(email='admin@example.com', password='pass', is_staff=True)
         self.non_member = User.objects.create_user(email='outsider@example.com', password='pass')
 
@@ -24,8 +25,8 @@ class ContributionAPITests(APITestCase):
             maximum_members=50
         )
 
-        self.member_membership = Membership.objects.create(user=self.member, chama=self.chama)
-        self.admin_membership = Membership.objects.create(user=self.admin, chama=self.chama)
+        self.member_membership = Membership.objects.create(user=self.member, chama=self.chama, role=Membership.Role.MEMBER)
+        self.admin_membership = Membership.objects.create(user=self.admin, chama=self.chama, role=Membership.Role.ADMIN)
 
         self.schedule = ContributionSchedule.objects.create(
             chama=self.chama,
@@ -84,19 +85,33 @@ class ContributionAPITests(APITestCase):
         response = self.client.post(self.url, data)
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
 
-    def test_member_can_only_list_own_contributions(self):
-        Contribution.objects.create(
-            member=self.member_membership, chama=self.chama, schedule=self.schedule,
-            amount=50, method='MPESA', status='APPROVED'
+def test_member_can_only_list_own_contributions(self):
+    Contribution.objects.create(
+        member=self.member_membership, chama=self.chama, schedule=self.schedule,
+        amount=50, method='MPESA', status='APPROVED'
+    )
+    Contribution.objects.create(
+        member=self.admin_membership, chama=self.chama, schedule=self.schedule,
+        amount=200, method='BANK', status='APPROVED'
+    )
+
+    self.client.force_authenticate(user=self.member)
+    response = self.client.get(self.url)
+
+    self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+    # Debug output (optional but useful during test failure)
+    print("Returned data:", response.data)
+    print("Expected user ID:", self.member.id)
+
+    # Stronger, per-item assertion with better error feedback
+    for item in response.data:
+        self.assertEqual(
+            item['user'],
+            self.member.id,
+            msg=f"Unexpected contribution returned: user={item['user']}, expected={self.member.id}"
         )
-        Contribution.objects.create(
-            member=self.admin_membership, chama=self.chama, schedule=self.schedule,
-            amount=200, method='BANK', status='APPROVED'
-        )
-        self.client.force_authenticate(user=self.member)
-        response = self.client.get(self.url)
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-        self.assertTrue(all([item['user'] == self.member.id for item in response.data]))
+
 
     def test_admin_can_see_all_contributions(self):
         Contribution.objects.create(

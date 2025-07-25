@@ -46,14 +46,8 @@ class Contribution(models.Model):
         REJECTED = "REJECTED", "Rejected"
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    member = models.ForeignKey(Membership, on_delete=models.CASCADE, related_name="contributions", null=True)
+    member = models.ForeignKey(Membership, on_delete=models.CASCADE, related_name="contributions")
     chama = models.ForeignKey(Chama, on_delete=models.CASCADE, related_name="contributions")
-    schedule = models.ForeignKey(
-        'ContributionSchedule', 
-        on_delete=models.CASCADE, 
-        related_name="contributions",
-        null=True, blank=True
-    )
     contribution_cycle = models.ForeignKey(
         'ContributionCycle',
         on_delete=models.SET_NULL,
@@ -61,12 +55,15 @@ class Contribution(models.Model):
         blank=True,
         related_name="contributions",
     )
+    schedule = models.ForeignKey(ContributionSchedule, on_delete=models.CASCADE, related_name="contributions")
     amount = models.DecimalField(max_digits=10, decimal_places=2, validators=[MinValueValidator(0.01)])
-    method = models.CharField(max_length=10, choices=PaymentMethod.choices, default=PaymentMethod.CASH)
+    method = models.CharField(max_length=10, choices=PaymentMethod.choices, default=PaymentMethod.MPESA)
     status = models.CharField(max_length=10, choices=Status.choices, default=Status.PENDING)
     transaction_date = models.DateTimeField(default=timezone.now)
     recorded_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name="recorded_contributions")
-    reference = models.CharField(max_length=60, blank=True, unique=True)
+    is_confirmed = models.BooleanField(default=False, editable=False)
+    confirmed_at = models.DateTimeField(null=True, blank=True)
+    reference = models.CharField(max_length=100, blank=True)
     notes = models.TextField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -76,12 +73,22 @@ class Contribution(models.Model):
         indexes = [
             models.Index(fields=['chama', 'transaction_date']),
             models.Index(fields=['member', 'transaction_date']),
-            models.Index(fields=['reference']),
         ]
         ordering = ["-created_at"]
 
+    def save(self, *args, **kwargs):
+        # Automatically set is_confirmed based on status
+        if self.status == self.Status.APPROVED:
+            self.is_confirmed = True
+            if not self.confirmed_at:
+                self.confirmed_at = timezone.now()
+        else:
+            self.is_confirmed = False
+        super().save(*args, **kwargs)
+
     def __str__(self):
-        return f"{self.member.user.username if self.member else 'No Member'} - {self.chama.name} - {self.amount} ({self.method})"
+        member_name = self.member.user.username if self.member and self.member.user else "Unknown"
+        return f"{member_name} - {self.chama.name} - {self.amount} ({self.method}) on {self.transaction_date}"
 
 
 class ContributionCycle(models.Model):
@@ -115,21 +122,3 @@ class ContributionCycle(models.Model):
 
     def __str__(self):
         return f"{self.chama.name} - Cycle {self.cycle_number} ({self.start_date} to {self.end_date})"
-
-
-class ActivityLog(models.Model):
-    ACTION_CHOICES = [
-        ('CONTRIBUTION', 'Contribution'),
-        ('LOAN', 'Loan'),
-        ('WITHDRAWAL', 'Withdrawal'),
-    ]
-
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    user = models.ForeignKey(User, on_delete=models.CASCADE)
-    chama = models.ForeignKey(Chama, on_delete=models.CASCADE)
-    action = models.CharField(max_length=20, choices=ACTION_CHOICES)
-    details = models.TextField()
-    created_at = models.DateTimeField(auto_now_add=True)
-
-    def __str__(self):
-        return f"[{self.action}] {self.details}"

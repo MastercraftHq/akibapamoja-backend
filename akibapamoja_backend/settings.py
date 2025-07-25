@@ -13,8 +13,8 @@ SECRET_KEY = os.environ.get('SECRET_KEY')
 DEBUG = os.environ.get('DEBUG', 'True') == 'True'
 # ALLOWED_HOSTS = os.environ.get('ALLOWED_HOSTS', '').split(',')
 
-# Custom user model
 AUTH_USER_MODEL = 'users.User'
+
 
 # Custom authentication backend
 AUTHENTICATION_BACKENDS = [
@@ -30,6 +30,7 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'activity',
     
     
     'django.contrib.admindocs',

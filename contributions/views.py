@@ -1,266 +1,242 @@
-from rest_framework import viewsets, permissions, filters, status
-from rest_framework.decorators import action, api_view, permission_classes
-from rest_framework.permissions import AllowAny
-from rest_framework.exceptions import PermissionDenied
-from rest_framework.response import Response
-from django.views.decorators.csrf import csrf_exempt
-from django.shortcuts import get_object_or_404
-from django.utils import timezone
 from django.db import transaction
-from django.contrib.auth import get_user_model
-import logging
+from django.db.models import F
+from rest_framework import viewsets, status, permissions
+from rest_framework.decorators import action, api_view, permission_classes
+from rest_framework.response import Response
+from rest_framework.exceptions import ValidationError, PermissionDenied, NotFound
 
-logger = logging.getLogger(__name__)
-
-from .models import Contribution, ActivityLog, ContributionSchedule
+from activity.models import ActivityLog
 from chama.models import Chama, Membership
+from users.models import User
+
+from .models import Contribution
 from .serializers import (
     ContributionSerializer,
     ContributionCreateSerializer,
     ContributionStatusUpdateSerializer
 )
-from .permissions import IsChamaMember, IsChamaAdmin
-
-User = get_user_model()
-
-
-# Utility functions
-def get_user_by_phone(phone):
-    try:
-        return User.objects.get(phone_number=phone)
-    except User.DoesNotExist:
-        return None
-
-def get_chama_for_user(user):
-    membership = Membership.objects.filter(user=user).first()
-    return membership.chama if membership else None
-
-from chama.models import Chama, Membership
-
-def get_chama_by_id_for_user(user, chama_id):
-    """
-    Returns a Chama instance if the user is a member of the given chama_id.
-    Otherwise, returns None.
-    """
-    try:
-        chama = Chama.objects.get(id=chama_id)
-        if Membership.objects.filter(user=user, chama=chama).exists():
-            return chama
-    except Chama.DoesNotExist:
-        return None
-    return None
-
 
 
 class ContributionViewSet(viewsets.ModelViewSet):
-    permission_classes = [permissions.IsAuthenticated, IsChamaMember]
-    filter_backends = [filters.OrderingFilter]
-    ordering = ['-created_at']
+    permission_classes = [permissions.IsAuthenticated]
 
     def get_serializer_class(self):
         if self.action == 'create':
             return ContributionCreateSerializer
-        elif self.action in ['partial_update', 'update_status']:
+        if self.action == 'update_status':
             return ContributionStatusUpdateSerializer
         return ContributionSerializer
 
-    def get_serializer_context(self):
-        context = super().get_serializer_context()
-        chama_id = self.request.query_params.get('chama')
-        if chama_id:
-            context['chama'] = get_object_or_404(Chama, id=chama_id)
-        return context
-
     def get_queryset(self):
+        # allow update_status to fetch *any* contribution
+        if self.action == 'update_status':
+            return Contribution.objects.all()
+
         chama_id = self.request.query_params.get('chama')
+        if not chama_id:
+            return Contribution.objects.none()
 
-        if chama_id:
-            chama = get_object_or_404(Chama, id=chama_id)
-            contributions = Contribution.objects.filter(chama=chama)
+        qs = Contribution.objects.filter(chama_id=chama_id)
 
-            if self.request.user.is_staff:
-                return contributions.select_related('member__user', 'schedule')
-            return contributions.filter(member__user=self.request.user).select_related('schedule')
-
+        # superusers & staff see everything for that chama
         if self.request.user.is_staff:
-            return Contribution.objects.all().select_related('member__user', 'schedule')
-        return Contribution.objects.filter(member__user=self.request.user).select_related('schedule')
+            return qs
 
-    def perform_create(self, serializer):
-        chama = self.get_serializer_context().get('chama')
-        if not chama:
-            raise PermissionDenied("Chama not found.")
-
-        method = serializer.validated_data.get('method', 'CASH')
-        
-        # Auto-approve MPESA payments
-        status = 'APPROVED' if method == 'MPESA' else 'PENDING'
-        
-        contribution = serializer.save(
-            chama=chama,
-            method=method,
-            status=status
-        )
-
-        ActivityLog.objects.create(
-            user=self.request.user,
-            chama=chama,
-            action='CONTRIBUTION',
-            details=f"Contribution of KES {contribution.amount:.2f} via {method} ({status})"
-        )
-
-    def update_status(self, request, pk=None):
-        """
-        PATCH /api/contributions/<id>/update-status/
-        Only chama admins can update a contribution's status.
-        """
-        contribution = self.get_object()
-
-        serializer = self.get_serializer(contribution, data=request.data, partial=True)
-        serializer.is_valid(raise_exception=True)
-        updated_contribution = serializer.save()
-
-        # If the status changed from non-approved to approved
-        if updated_contribution.status == 'APPROVED' and contribution.status != 'APPROVED':
-            contribution.chama.balance += contribution.amount
-            contribution.chama.save()
-
-            ActivityLog.objects.create(
-                user=request.user,
-                chama=contribution.chama,
-                action='CONTRIBUTION',
-                details=f"Manual contribution of KES {contribution.amount:.2f} approved by admin"
-            )
-
-        return Response(serializer.data, status=status.HTTP_200_OK)
-
-@csrf_exempt
-@api_view(['POST'])
-@permission_classes([AllowAny])
-def mpesa_callback(request):
-    """
-    Handle incoming payment confirmation from M-Pesa.
-    This endpoint automatically records approved contributions with MPESA method.
-
-    Expected payload:
-    {
-        "phone_number": "2547XXXXXX",  # Format: 2547...
-        "amount": 1000,               # Positive number
-        "reference": "MPESA12345",   # Unique transaction ID
-        "chama_id": "abc-123",       # UUID of the chama
-        "timestamp": "20230724...",   # Optional: Payment timestamp
-        "first_name": "John",        # Optional: Payer details
-        "last_name": "Doe"
-    }
-    """
-    try:
-        data = request.data
-        
-        # Validate required fields
-        required_fields = ['phone_number', 'amount', 'reference', 'chama_id']
-        if not all(field in data for field in required_fields):
-            return Response(
-                {"detail": "Missing required fields. Need: phone_number, amount, reference, chama_id"},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-
-        # Parse and validate data
-        phone = data['phone_number']
+        # find *your* membership in that chama
         try:
-            amount = float(data['amount'])
-            if amount <= 0:
-                raise ValueError("Amount must be positive")
-        except (ValueError, TypeError):
-            return Response(
-                {"detail": "Invalid amount. Must be a positive number"},
-                status=status.HTTP_400_BAD_REQUEST
+            membership = Membership.objects.get(
+                user=self.request.user, chama_id=chama_id
             )
+        except Membership.DoesNotExist:
+            return Contribution.objects.none()
 
-        reference = data['reference']
-        chama_id = data['chama_id']
+        # ADMIN/TREASURER sees all; plain member only their own
+        if membership.role in (
+            Membership.Role.ADMIN,
+            Membership.Role.TREASURER
+        ):
+            return qs
 
-        # Get user and validate chama membership
-        try:
-            user = User.objects.get(phone_number=phone)
-        except User.DoesNotExist:
-            return Response(
-                {"detail": "User not found for the provided phone number"},
-                status=status.HTTP_404_NOT_FOUND
-            )
+        return qs.filter(member__user=self.request.user)
 
+    def create(self, request, *args, **kwargs):
+        user = request.user
+
+        # 1. Resolve current chama & membership
+        chama_id = request.query_params.get('chama')
+        if not chama_id:
+            raise ValidationError({'chama': 'This query parameter is required.'})
         try:
             chama = Chama.objects.get(id=chama_id)
-            if not Membership.objects.filter(user=user, chama=chama).exists():
-                return Response(
-                    {"detail": "User is not a member of this chama"},
-                    status=status.HTTP_403_FORBIDDEN
-                )
         except Chama.DoesNotExist:
-            return Response(
-                {"detail": "Chama not found"},
-                status=status.HTTP_404_NOT_FOUND
-            )
+            raise ValidationError({'chama': 'Invalid chama ID.'})
 
-        # Process payment in atomic transaction
-        with transaction.atomic():
-            # Check for duplicate transaction (reference must be unique for MPESA)
-            if Contribution.objects.filter(reference=reference, method='MPESA').exists():
-                return Response(
-                    {
-                        "detail": "Payment already processed",
-                        "reference": reference,
-                        "status": "DUPLICATE"
-                    },
-                    status=status.HTTP_409_CONFLICT
-                )
-
-            # Get the membership record
+        try:
             membership = Membership.objects.get(user=user, chama=chama)
+        except Membership.DoesNotExist:
+            raise PermissionDenied('You are not a member of this chama.')
 
-            # Create the contribution record
+        # 2. Validate input (includes schedule!)
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+
+        schedule  = data['schedule']
+        amount    = data['amount']
+        method    = data.get('method', Contribution.PaymentMethod.CASH)
+        reference = data.get('reference', '').strip()
+
+        # 3. MPESA rules
+        if method == Contribution.PaymentMethod.MPESA:
+            if not reference:
+                raise ValidationError({'reference': 'M-Pesa reference is required.'})
+            if Contribution.objects.filter(reference=reference).exists():
+                raise ValidationError({'reference': 'Duplicate reference.'})
+            status_val = Contribution.Status.APPROVED
+        else:
+            status_val = Contribution.Status.PENDING
+
+        # 4. Create + balance bump + log
+        with transaction.atomic():
             contribution = Contribution.objects.create(
-                chama=chama,
                 member=membership,
+                chama=chama,
+                schedule=schedule,
                 amount=amount,
-                method='MPESA',  # Automatically set for M-Pesa payments
-                status='APPROVED',  # Auto-approved
+                method=method,
                 reference=reference,
-                transaction_date=data.get('timestamp') or timezone.now()
+                status=status_val,
             )
 
-            # Update chama balance
-            chama.balance += amount
-            chama.save()
+            if status_val == Contribution.Status.APPROVED:
+                chama.balance = F('balance') + amount
+                chama.save(update_fields=['balance'])
 
-            # Create activity log
             ActivityLog.objects.create(
-                user=user,
                 chama=chama,
-                action='CONTRIBUTION',
-                details=(
-                    f"M-Pesa contribution of KES {amount:.2f} from "
-                    f"{user.get_full_name() or phone} (Ref: {reference})"
+                user=user,
+                message=(
+                    f'Contribution {contribution.id} of '
+                    f'{amount} created with status={status_val}.'
                 )
             )
 
-            # Prepare response data
-            response_data = {
-                "status": "success",
-                "contribution_id": str(contribution.id),
-                "chama_id": str(chama.id),
-                "member_id": str(user.id),
-                "amount": amount,
-                "reference": reference,
-                "new_balance": chama.balance,
-                "timestamp": contribution.transaction_date.isoformat()
-            }
+        # 5. Return full representation
+        out = ContributionSerializer(contribution, context={'request': request}).data
+        return Response(out, status=status.HTTP_201_CREATED)
 
-            return Response(response_data, status=status.HTTP_201_CREATED)
+    @action(
+        detail=True,
+        methods=['patch'],
+        url_path='update-status',
+        permission_classes=[permissions.IsAuthenticated]
+    )
+    def update_status(self, request, pk=None):
+        contribution = self.get_object()
+        user = request.user
 
-    except Exception as e:
-        # Log the unexpected error for debugging
-        logger.error(f"Error processing M-Pesa callback: {str(e)}", exc_info=True)
-        return Response(
-            {"detail": "An error occurred while processing your payment", "error": str(e)},
-            status=status.HTTP_500_INTERNAL_SERVER_ERROR
+        # only chama ADMIN/TREASURER may change status
+        if not Membership.objects.filter(
+            user=user,
+            chama=contribution.chama,
+            role__in=[Membership.Role.ADMIN, Membership.Role.TREASURER]
+        ).exists():
+            raise PermissionDenied(
+                'Only chama admins or treasurers can update status.'
+            )
+
+        if contribution.status != Contribution.Status.PENDING:
+            raise ValidationError(
+                {'status': 'Only pending contributions can be updated.'}
+            )
+
+        serializer = self.get_serializer(
+            contribution, data=request.data, partial=True
         )
+        serializer.is_valid(raise_exception=True)
+        new_status = serializer.validated_data['status']
+        old_status = contribution.status
+
+        with transaction.atomic():
+            serializer.save()
+            if old_status != Contribution.Status.APPROVED \
+               and new_status == Contribution.Status.APPROVED:
+                chama = contribution.chama
+                chama.balance = F('balance') + contribution.amount
+                chama.save(update_fields=['balance'])
+
+            ActivityLog.objects.create(
+                chama=contribution.chama,
+                user=user,
+                message=(
+                    f'Contribution {contribution.id} status '
+                    f'changed from {old_status} to {new_status}.'
+                )
+            )
+
+        return Response(
+            {'detail': 'Contribution status updated successfully.'},
+            status=status.HTTP_200_OK
+        )
+
+
+@api_view(['POST'])
+@permission_classes([])   # open for M-Pesa callbacks
+def mpesa_callback(request):
+    required = ('phone', 'amount', 'reference', 'chama_id')
+    missing = [f for f in required if not request.data.get(f)]
+    if missing:
+        return Response(
+            {'error': f'Missing required fields: {", ".join(missing)}'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    # lookup user + membership
+    phone = request.data['phone']
+    try:
+        user = User.objects.get(phone=phone)
+    except User.DoesNotExist:
+        raise NotFound('User not found.')
+
+    try:
+        chama = Chama.objects.get(id=request.data['chama_id'])
+        membership = Membership.objects.get(user=user, chama=chama)
+    except Chama.DoesNotExist:
+        raise ValidationError({'chama_id': 'Invalid chama ID.'})
+    except Membership.DoesNotExist:
+        raise PermissionDenied('User is not a member of this chama.')
+
+    reference = request.data['reference']
+    if Contribution.objects.filter(reference=reference).exists():
+        return Response(
+            {'status': 'DUPLICATE',
+             'message': 'Contribution with this reference already exists'},
+            status=status.HTTP_409_CONFLICT
+        )
+
+    # record + bump + log
+    with transaction.atomic():
+        contribution = Contribution.objects.create(
+            member=membership,
+            chama=chama,
+            amount=request.data['amount'],
+            method=Contribution.PaymentMethod.MPESA,
+            reference=reference,
+            status=Contribution.Status.APPROVED
+        )
+        chama.balance = F('balance') + contribution.amount
+        chama.save(update_fields=['balance'])
+
+        ActivityLog.objects.create(
+            chama=chama,
+            user=user,
+            message=(
+                f'M-Pesa contribution recorded (ref={reference}, '
+                f'amount={contribution.amount}).'
+            )
+        )
+
+    return Response(
+        {'status': 'success', 'message': 'M-Pesa contribution recorded.'},
+        status=status.HTTP_201_CREATED
+    )
