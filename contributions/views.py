@@ -10,33 +10,71 @@ from django.db import transaction
 from .models import Contribution, ActivityLog, ContributionSchedule
 from chama.models import Chama, Membership
 from .serializers import ContributionSerializer, ContributionCreateSerializer
-from .permissions import IsChamaMember
+from .permissions import IsChamaMember, CanFilterByMember
+from django_filters.rest_framework import DjangoFilterBackend
 from .utils import get_user_by_phone, get_chama_for_user
 
 class ContributionViewSet(viewsets.ModelViewSet):
     serializer_class   = ContributionSerializer
-    permission_classes = [permissions.IsAuthenticated, IsChamaMember]
-    filter_backends    = [filters.OrderingFilter]
+    permission_classes = [permissions.IsAuthenticated, IsChamaMember, CanFilterByMember]
+    filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
+    filterset_fields = ['chama', 'member']
     ordering           = ['-created_at']
 
     def get_queryset(self):
         # Get chama_id from query params
         chama_id = self.request.query_params.get('chama')
-        chama = get_object_or_404(Chama, id=chama_id) if chama_id else None
+        
+        if not chama_id:
+            raise PermissionDenied("chama parameter is required")
+        try:
+            chama = get_object_or_404(Chama, id=chama_id)
+        except Chama.DoesNotExist:
+            raise NotFound("Chama does not exist")
         
         # Ensure user is a member of the chama
-        if chama and not Membership.objects.filter(user=self.request.user, chama=chama).exists():
+        # if chama and not Membership.objects.filter(user=self.request.user, chama=chama).exists():
+        #     raise PermissionDenied("You are not a member of this Chama.")
+        
+        if not Membership.objects.filter(user=self.request.user, chama=chama).exists():
             raise PermissionDenied("You are not a member of this Chama.")
         
         # Regular memebers can only see their contributions
         # Admins and treasurers can see all contributions in the chama
-        if chama and self.request.user.is_staff:
-            return Contribution.objects.filter(chama=chama).select_related('member__user', 'schedule').order_by('-transaction_date')
-        else:
-            return Contribution.objects.filter(
-                chama=chama,
-                member__user=self.request.user
-            ).select_related('schedule').order_by('-transaction_date') if chama else Contribution.objects.none()
+        # if chama and self.request.user.is_staff:
+        #     return Contribution.objects.filter(chama=chama).select_related('member__user', 'schedule').order_by('-transaction_date')
+        # else:
+        #     return Contribution.objects.filter(
+        #         chama=chama,
+        #         member__user=self.request.user
+        #     ).select_related('schedule').order_by('-transaction_date') if chama else Contribution.objects.none()
+        
+        # Check for member_id filter
+        member_id = self.request.query_params.get('member')
+        if member_id:
+            # Only admins or treasurers can filter by member_id
+            membership = Membership.objects.get(user=self.request.user, chama=chama)
+            if membership.role not in [Membership.Role.ADMIN, Membership.Role.TREASURER]:
+                raise PermissionDenied("Only admins or treasurers can filter by member_id")
+
+            # Validate member_id belongs to the chama
+            if not Membership.objects.filter(id=member_id, chama=chama).exists():
+                raise NotFound("Member does not belong to this Chama")
+
+        # Admins and treasurers can see all contributions in the chama
+        if Membership.objects.filter(
+            user=self.request.user,
+            chama=chama,
+            role__in=[Membership.Role.ADMIN, Membership.Role.TREASURER]
+        ).exists():
+            return Contribution.objects.filter(chama=chama).select_related('member__user', 'schedule')
+
+        # Regular members can only see their own contributions
+        return Contribution.objects.filter(
+            chama=chama,
+            member__user=self.request.user
+        ).select_related('member__user', 'schedule')
+
     
     def get_serializer_class(self):
         if self.action == 'create':

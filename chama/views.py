@@ -58,4 +58,4 @@ class ListMembersView(generics.ListAPIView):
 
     def get_queryset(self):
         chama = get_object_or_404(Chama, id=self.kwargs['groupId'])
-        return Membership.objects.filter(chama=chama)
+        return Membership.objects.filter(chama=chama).order_by('id')
