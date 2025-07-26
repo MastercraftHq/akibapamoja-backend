@@ -1,16 +1,18 @@
-from rest_framework import viewsets, status
+from rest_framework import viewsets, status, generics
 from rest_framework.decorators import action
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from django.contrib.auth import get_user_model
 from drf_yasg.utils import swagger_auto_schema
+from django.shortcuts import get_object_or_404
+
 
 from .enums import (
     MembershipRole,
     MembershipStatus,
 )
 from .models import Chama, Membership
-from .serializers import ChamaSerializer, MembershipSerializer
+from .serializers import ChamaSerializer, MembershipSerializer,JoinChamaSerializer
 from .permissions import IsChamaAdmin, IsChamaMember
 
 User = get_user_model()
@@ -61,3 +63,32 @@ class ChamaViewSet(viewsets.ModelViewSet):
         members = Membership.objects.filter(chama_id=pk)
         serializer = MembershipSerializer(members, many=True)
         return Response(serializer.data)
+    
+class ListMembersView(generics.ListAPIView):
+    serializer_class = MembershipSerializer
+    permission_classes = [IsAuthenticated, IsChamaMember]
+
+    def get_queryset(self):
+        chama = get_object_or_404(Chama, id=self.kwargs['groupId'])
+        return Membership.objects.filter(chama=chama)
+
+class JoinChamaView(generics.GenericAPIView):
+    permission_classes = [IsAuthenticated]
+    serializer_class = JoinChamaSerializer
+
+    def post(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        
+        chama = serializer.validated_data['join_code']  
+        membership = Membership.objects.create(
+            user=request.user,
+            chama=chama,
+            role=Membership.Role.MEMBER,
+            status=Membership.Status.PENDING
+        )
+        
+        return Response({
+            "message": "Join request submitted successfully. Awaiting admin approval.",
+            "membership": MembershipSerializer(membership).data
+        }, status=status.HTTP_201_CREATED)

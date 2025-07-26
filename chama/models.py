@@ -54,19 +54,16 @@ class Membership(models.Model):
         on_delete=models.CASCADE,
         related_name='members'
     )
-
     role = models.CharField(
         max_length=20,
         choices=MembershipRole.choices(),
         default=MembershipRole.MEMBER.value
     )
-
     status = models.CharField(
         max_length=20,
         choices=MembershipStatus.choices(),
         default=MembershipStatus.ACTIVE.value
     )
-
     joined_at = models.DateTimeField(auto_now_add=True)
     payout_order = models.IntegerField(null=True, blank=True)
 
@@ -76,5 +73,3 @@ class Membership(models.Model):
 
     def __str__(self):
         return f"{self.user} in {self.chama} as {self.role}"
-
-
