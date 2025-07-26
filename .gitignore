@@ -68,6 +68,8 @@ coverage.xml
 .pytest_cache/
 cover/
 
+*.qodo/
+
 # Translations
 *.mo
 

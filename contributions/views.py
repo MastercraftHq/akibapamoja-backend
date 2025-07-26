@@ -1,4 +1,5 @@
-from rest_framework import viewsets, permissions, filters
+import logging
+from rest_framework import viewsets, permissions, filters, status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.exceptions import PermissionDenied, NotFound
 from rest_framework.response import Response
@@ -73,6 +74,75 @@ class ContributionViewSet(viewsets.ModelViewSet):
             action='CONTRIBUTION',
             details=f"Manual contribution of KES {serializer.validated_data['amount']:.2f}"
         )
+        
+def _check_permissions(self, contribution):
+    """Check if user has permission to update/delete a contribution."""
+    try:
+        membership = Membership.objects.get(user=self.request.user, chama=contribution.chama)
+    except Membership.DoesNotExist:
+        raise PermissionDenied("You are not a member of this Chama.")
+    
+    if membership.status != Membership.Status.ACTIVE:
+        raise PermissionDenied("Only users with ACTIVE membership can perform this action.")
+    
+    return membership.role == Membership.Role.ADMIN, membership
+
+def update(self, request, *args, **kwargs):
+    contribution = self.get_object()
+    is_admin, membership = self._check_permissions(contribution)
+    
+    if not is_admin:
+        raise PermissionDenied("Only admins can update contributions.")
+    
+    # Only allow editing specific fields
+    allowed_fields = {'amount', 'notes', 'contribution_date'}
+    invalid_fields = set(request.data.keys()) - allowed_fields
+    if invalid_fields:
+        return Response({'error': f'Fields {list(invalid_fields)} are not editable.'}, status=status.HTTP_400_BAD_REQUEST)
+    return super().update(request, *args, **kwargs)
+
+
+def destroy(self, request, *args, **kwargs):
+    contribution = self.get_object()
+    is_admin, membership = self._check_permissions(contribution)
+    
+    with transaction.atomic():
+        # Admin can delete any contribution
+        if is_admin:
+            ActivityLog.objects.create(
+                user=request.user,
+                action="delete_contribution",
+                contribution=contribution,
+                description=f"Admin deleted contribution ID {contribution.id}"
+            )
+            contribution.delete()
+            return Response({"detail": "Contribution deleted successfully."}, status=status.HTTP_204_NO_CONTENT)
+        
+        # Members can only delete their own contribution if status is PENDING or REJECTED
+        if contribution.user != request.user:
+            raise PermissionDenied("You can only delete your own contributions.")
+        
+        if contribution.status not in ['PENDING', 'REJECTED']:
+            raise PermissionDenied("Only pending or rejected contributions can be deleted.")
+        
+        ActivityLog.objects.create(
+            user=request.user,
+            action="delete_contribution",
+            contribution=contribution,
+            description=f"Member deleted own contribution {contribution.id}"
+        )
+        contribution.delete()
+        return Response({"detail": "Contribution deleted successfully."}, status=status.HTTP_204_NO_CONTENT)
+
+def get_object(self) -> Contribution:
+    try:
+        obj = super().get_object()
+    except NotFound as e:
+        lookup_field = getattr(self, 'lookup_field', 'pk')
+        lookup_value = self.kwargs.get(lookup_field, None)
+        logging.warning(f"Contribution retrieval failed for {lookup_field}={lookup_value}: {e}")
+        raise NotFound(f"Contribution with {lookup_field}={lookup_value} not found.")
+    return obj
         
 @csrf_exempt
 @api_view(['POST'])
