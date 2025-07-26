@@ -1,8 +1,18 @@
-from django.urls import path
-from . import views
+from django.urls import path, include
+from rest_framework.routers import DefaultRouter
+from users.views import UserViewSet, MeViewSet
 
-urlpatterns = [ 
-    path('register/', views.CreateUserView.as_view(), name="create-user"), 
-    path('login/', views.LoginView.as_view(), name="log-in"),
-    path('me/', views.UpdateUserView.as_view(), name='update-user'),     
+router = DefaultRouter()
+router.register(r'auth', UserViewSet, basename='auth')
+
+
+me = MeViewSet.as_view({
+    'get': 'list',
+    'put': 'update',
+    'patch': 'partial_update',
+})
+
+urlpatterns = [
+    path('', include(router.urls)),
+    path('me/', me, name='me-profile'),
 ]
