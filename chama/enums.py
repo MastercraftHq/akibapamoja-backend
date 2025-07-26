@@ -18,23 +18,3 @@ class MembershipStatus(Enum):
     @classmethod
     def choices(cls):
         return [(status.value, status.name.capitalize()) for status in cls]
-    
-class ContributionStatus(Enum):
-    PENDING = "PENDING"
-    COMPLETED = "COMPLETED"
-    OVERDUE = "OVERDUE"
-    PARTIAL = "PARTIAL"
-
-    @classmethod
-    def choices(cls):
-        return [(status.value, status.name.capitalize()) for status in cls]
-
-class ContributionFrequency(Enum):
-    DAILY = "DAILY"
-    WEEKLY = "WEEKLY"
-    MONTHLY = "MONTHLY"
-    QUARTERLY = "QUARTERLY"
-
-    @classmethod
-    def choices(cls):
-        return [(freq.value, freq.name.capitalize()) for freq in cls]

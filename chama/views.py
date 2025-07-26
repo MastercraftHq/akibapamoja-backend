@@ -8,11 +8,9 @@ from drf_yasg.utils import swagger_auto_schema
 from .enums import (
     MembershipRole,
     MembershipStatus,
-    ContributionFrequency,
-    ContributionStatus
 )
-from .models import Chama, Membership, ContributionSchedule
-from .serializers import ChamaSerializer, MembershipSerializer, ContributionScheduleSerializer
+from .models import Chama, Membership
+from .serializers import ChamaSerializer, MembershipSerializer
 from .permissions import IsChamaAdmin, IsChamaMember
 
 User = get_user_model()
@@ -23,6 +21,11 @@ class ChamaViewSet(viewsets.ModelViewSet):
     permission_classes = [IsAuthenticated]
 
     def perform_create(self, serializer):
+        """
+        When a Chama is created, automatically assign the
+        requesting user as an ADMIN member of that Chama.
+        """
+
         chama = serializer.save()
         Membership.objects.create(
             user=self.request.user,
@@ -50,19 +53,11 @@ class ChamaViewSet(viewsets.ModelViewSet):
     )
     @action(detail=True, methods=['get'], permission_classes=[IsChamaMember])
     def members(self, request, pk=None):
+        """
+        GET /chamas/{pk}/members/
+        Any member can list all other members.
+        """
+
         members = Membership.objects.filter(chama_id=pk)
         serializer = MembershipSerializer(members, many=True)
         return Response(serializer.data)
-    
-    @swagger_auto_schema(
-        operation_description="Add a contribution schedule",
-        request_body=ContributionScheduleSerializer,
-        responses={201: ContributionScheduleSerializer()}
-    )
-    @action(detail=True, methods=['post'], permission_classes=[IsChamaAdmin])
-    def add_schedule(self, request, pk=None):
-        chama = self.get_object()
-        serializer = ContributionScheduleSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        serializer.save(chama=chama)
-        return Response(serializer.data, status=status.HTTP_201_CREATED)
