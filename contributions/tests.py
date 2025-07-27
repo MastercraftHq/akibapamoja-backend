@@ -19,9 +19,12 @@ class ContributionAPITests(APITestCase):
         self.non_member = User.objects.create_user(
             password='pass', email=f'outsider_{self._testMethodName}@example.com'
         )
-        self.chama = Chama.objects.create(name='Test Chama', contribution_amount=100, contribution_day=1, maximum_members=50)
+        # Removed unsupported fields: contribution_amount, contribution_day
+        self.chama = Chama.objects.create(name='Test Chama', maximum_members=50)
+        
         Membership.objects.create(user=self.member, chama=self.chama)
         Membership.objects.create(user=self.admin, chama=self.chama)
+        
         self.client = APIClient()
         self.url = reverse('contributions-list') + f'?chama={self.chama.id}'
 
@@ -56,6 +59,7 @@ class ContributionAPITests(APITestCase):
         )
         Contribution.objects.create(member=self.chama.members.get(user=self.member), chama=self.chama, schedule=schedule, amount=50, method='MPESA')
         Contribution.objects.create(member=self.chama.members.get(user=self.admin), chama=self.chama, schedule=schedule, amount=200, method='BANK')
+        
         self.client.force_authenticate(user=self.member)
         response = self.client.get(self.url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
@@ -70,6 +74,7 @@ class ContributionAPITests(APITestCase):
         )
         Contribution.objects.create(member=self.chama.members.get(user=self.member), chama=self.chama, schedule=schedule, amount=50, method='MPESA')
         Contribution.objects.create(member=self.chama.members.get(user=self.admin), chama=self.chama, schedule=schedule, amount=200, method='BANK')
+        
         self.client.force_authenticate(user=self.admin)
         response = self.client.get(self.url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
