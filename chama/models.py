@@ -21,7 +21,7 @@ class Chama(models.Model):
     minimum_members = models.IntegerField(default=1)
     maximum_members = models.IntegerField()
     balance = models.DecimalField(
-        max_digits=12, decimal_places=2, default=0
+        max_digits=15, decimal_places=2, default=0
     )
     is_active = models.BooleanField(default=True)
     created_at = models.DateField(auto_now_add=True)
