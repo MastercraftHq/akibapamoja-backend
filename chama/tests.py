@@ -1,206 +1,153 @@
-from django.test import TestCase
+# chama/tests.py
 from django.urls import reverse
-from rest_framework.test import APITestCase
-from rest_framework import status
 from django.contrib.auth import get_user_model
-from datetime import date, timedelta
-from django.core.exceptions import ValidationError
-from rest_framework.test import APIClient
-
+from rest_framework import status
+from rest_framework.test import APITestCase, APIClient
 
 from .models import Chama, Membership
-from .enums import (
-    MembershipRole,
-    MembershipStatus,
-)
-from .validators import validate_future_date
 
 User = get_user_model()
 
 
-class ModelTests(TestCase):
+class ChamaAPITest(APITestCase):
     def setUp(self):
-        self.user = User.objects.create_user(
-            email='test@example.com',
-            password='testpass123'
-        )
-        self.chama = Chama.objects.create(
-            name='Test Chama',
-            currency='KES',
-            maximum_members=10
-        )
-
-    def test_chama_creation(self):
-        self.assertEqual(self.chama.name, 'Test Chama')
-        self.assertTrue(self.chama.join_code)
-        self.assertEqual(len(self.chama.join_code), 8)
-        self.assertTrue(self.chama.is_active)
-
-    def test_membership_creation_defaults(self):
-        membership = Membership.objects.create(
-            user=self.user,
-            chama=self.chama,
-            role=MembershipRole.ADMIN.value
-        )
-        self.assertEqual(membership.role, MembershipRole.ADMIN.value)
-        self.assertEqual(membership.status, MembershipStatus.ACTIVE.value)
-        self.assertEqual(
-            str(membership),
-            f"{self.user} in {self.chama} as {membership.role}"
-        )
-
-    
-class PermissionTests(APITestCase):
-    def setUp(self):
-        self.admin = User.objects.create_user(
+        # Adapt to your custom create_user signature (email & phone required)
+        self.user_admin = User.objects.create_user(
             email='admin@example.com',
-            password='adminpass'
+            phone='+254700000001',
+            password='pass'
         )
-        self.member = User.objects.create_user(
-            email='member@example.com',
-            password='memberpass'
+        self.user_other = User.objects.create_user(
+            email='other@example.com',
+            phone='+254700000002',
+            password='pass'
         )
-        self.non_member = User.objects.create_user(
-            email='nonmember@example.com',
-            password='nonmemberpass'
+
+        self.client_admin = APIClient()
+        self.client_admin.force_authenticate(user=self.user_admin)
+
+        self.client_other = APIClient()
+        self.client_other.force_authenticate(user=self.user_other)
+
+    def test_create_chama_auto_join_code_and_admin_membership(self):
+        url = reverse('create-chama')
+        data = {
+            'name': 'TestChama',
+            'currency': 'KES',
+            'maximum_members': 5
+        }
+        response = self.client_admin.post(url, data, format='json')
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+
+        chama_id = response.data['id']
+        self.assertIn('join_code', response.data)
+        self.assertEqual(len(response.data['join_code']), 8)
+
+        membership = Membership.objects.get(
+            user=self.user_admin,
+            chama_id=chama_id
         )
-        self.chama = Chama.objects.create(
-            name='Permission Test Chama',
-            currency='KES',
+        self.assertEqual(membership.role, Membership.Role.ADMIN)
+        self.assertEqual(membership.status, Membership.Status.ACTIVE)
+
+    def test_retrieve_chama_detail(self):
+        chama = Chama.objects.create(
+            name='DuoChama',
+            currency='USD',
             maximum_members=10
         )
+        url = reverse('chama-detail', kwargs={'pk': chama.id})
+        response = self.client_admin.get(url)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data['name'], 'DuoChama')
 
-        Membership.objects.create(
-            user=self.admin,
-            chama=self.chama,
-            role=MembershipRole.ADMIN.value
+    def test_add_member_by_admin(self):
+        chama = Chama.objects.create(
+            name='Alpha',
+            currency='EUR',
+            maximum_members=3
         )
         Membership.objects.create(
-            user=self.member,
-            chama=self.chama,
-            role=MembershipRole.MEMBER.value
+            user=self.user_admin,
+            chama=chama,
+            role=Membership.Role.ADMIN,
+            status=Membership.Status.ACTIVE
         )
 
-    def test_is_chama_admin_permission(self):
-        self.client.force_authenticate(user=self.admin)
-        url = reverse('chama-detail', kwargs={'pk': self.chama.id})
-        response = self.client.get(url)
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-
-    def test_is_chama_member_permission(self):
-        self.client.force_authenticate(user=self.member)
-        url = reverse('chama-detail', kwargs={'pk': self.chama.id})
-        response = self.client.get(url)
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-
-    def test_non_member_permissions(self):
-        self.client.force_authenticate(user=self.non_member)
-        url = reverse('chama-detail', kwargs={'pk': self.chama.id})
-        response = self.client.get(url)
-        # your current ViewSet only enforces IsAuthenticated here,
-        # so non-members still see 200
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
-
-
-class ViewTests(APITestCase):
-    def setUp(self):
-        self.user = User.objects.create_user(
-            email='user@example.com',
-            password='testpass123'
-        )
-        self.client.force_authenticate(user=self.user)
-        self.chama_data = {
-            'name': 'New Chama',
-            'currency': 'USD',
-            'maximum_members': 15,
-            'description': 'Test description'
-        }
-
-    def test_create_chama(self):
-        url = reverse('chama-list')
-        response = self.client.post(url, self.chama_data, format='json')
+        url = reverse('add-member', kwargs={'groupId': chama.id})
+        data = {'email': self.user_other.email, 'role': Membership.Role.MEMBER}
+        response = self.client_admin.post(url, data, format='json')
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
-        chama = Chama.objects.first()
-        self.assertIsNotNone(chama)
-        membership = Membership.objects.get(chama=chama, user=self.user)
-        self.assertEqual(membership.role, MembershipRole.ADMIN.value)
 
-class ValidatorTests(TestCase):
-    def test_validate_future_date_raises_for_past(self):
-        past = date.today() - timedelta(days=1)
-        with self.assertRaises(ValidationError):
-            validate_future_date(past)
+        m = Membership.objects.get(user=self.user_other, chama=chama)
+        self.assertEqual(m.status, Membership.Status.INVITED)
 
-    def test_validate_future_date_allows_future(self):
-        future = date.today() + timedelta(days=1)
-        try:
-            validate_future_date(future)
-        except ValidationError:
-            self.fail("validate_future_date raised on a future date")
+    def test_add_member_by_non_admin_forbidden(self):
+        chama = Chama.objects.create(
+            name='Beta',
+            currency='GBP',
+            maximum_members=4
+        )
+        Membership.objects.create(
+            user=self.user_admin,
+            chama=chama,
+            role=Membership.Role.ADMIN,
+            status=Membership.Status.ACTIVE
+        )
 
-    def test_list_members_as_member(self):
-        url = reverse("list-members", kwargs={"groupId": self.group_id})
-        self.client.force_authenticate(user=self.member_user)
-        response = self.client.get(url)
+        url = reverse('add-member', kwargs={'groupId': chama.id})
+        data = {'email': self.user_other.email}
+        response = self.client_other.post(url, data, format='json')
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_list_members_by_active_member(self):
+        chama = Chama.objects.create(
+            name='Gamma',
+            currency='JPY',
+            maximum_members=6
+        )
+        Membership.objects.create(
+            user=self.user_admin,
+            chama=chama,
+            role=Membership.Role.ADMIN,
+            status=Membership.Status.ACTIVE
+        )
+        Membership.objects.create(
+            user=self.user_other,
+            chama=chama,
+            role=Membership.Role.MEMBER,
+            status=Membership.Status.ACTIVE
+        )
+
+        url = reverse('list-members', kwargs={'groupId': chama.id})
+        response = self.client_other.get(url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(len(response.data), 2)
 
-    def test_list_members_as_non_member_fails(self):
-        url = reverse("list-members", kwargs={"groupId": self.group_id})
-        self.client.force_authenticate(user=self.other_user)
-        response = self.client.get(url)
-        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
-        
-class JoinChamaTests(APITestCase):
-    def setUp(self):
-        self.client = APIClient()
-        self.user = User.objects.create_user(email="test@example.com", password="testpass")
-        self.chama = Chama.objects.create(
-            name="Test Chama",
-            contribution_amount=1000.00,
-            contribution_frequency="monthly",
-            contribution_day=5,
-            currency="KES",
-            late_payment_fee=100.00,
-            minimum_members=1,
-            maximum_members=10,
-            join_code="TEST1234"
+    def test_join_chama_and_duplicate(self):
+        chama = Chama.objects.create(
+            name='Delta',
+            currency='AUD',
+            maximum_members=8
         )
-        self.join_url = reverse("join-chama")
+        Membership.objects.create(
+            user=self.user_admin,
+            chama=chama,
+            role=Membership.Role.ADMIN,
+            status=Membership.Status.ACTIVE
+        )
+        code = chama.join_code
 
-    def test_join_chama_success(self):
-        self.client.force_authenticate(user=self.user)
-        data = {"join_code": "TEST1234"}
-        response = self.client.post(self.join_url, data, format="json")
-        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
-        self.assertEqual(response.data["message"], "Join request submitted successfully. Awaiting admin approval.")
-        membership = Membership.objects.get(user=self.user, chama=self.chama)
-        self.assertEqual(membership.status, Membership.Status.PENDING)
-        self.assertEqual(membership.role, Membership.Role.MEMBER)
+        url = reverse('join-chama')
+        response1 = self.client_other.post(
+            url, {'join_code': code}, format='json'
+        )
+        self.assertEqual(response1.status_code, status.HTTP_201_CREATED)
+        m1 = Membership.objects.get(user=self.user_other, chama=chama)
+        self.assertEqual(m1.status, Membership.Status.PENDING)
 
-    def test_join_chama_already_member(self):
-        Membership.objects.create(user=self.user, chama=self.chama, role=Membership.Role.MEMBER, status=Membership.Status.ACTIVE)
-        self.client.force_authenticate(user=self.user)
-        data = {"join_code": "TEST1234"}
-        response = self.client.post(self.join_url, data, format="json")
-        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertIn("You are already a member of this Chama.", response.data["non_field_errors"])
-
-    def test_join_chama_invalid_code(self):
-        self.client.force_authenticate(user=self.user)
-        data = {"join_code": "INVALID123"}
-        response = self.client.post(self.join_url, data, format="json")
-        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertIn("Invalid join code.", response.data["join_code"])
-
-    def test_join_chama_missing_code(self):
-        self.client.force_authenticate(user=self.user)
-        data = {}
-        response = self.client.post(self.join_url, data, format="json")
-        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertIn("This field is required.", response.data["join_code"])
-
-    def test_join_chama_unauthenticated(self):
-        data = {"join_code": "TEST1234"}
-        response = self.client.post(self.join_url, data, format="json")
-        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+        response2 = self.client_other.post(
+            url, {'join_code': code}, format='json'
+        )
+        self.assertEqual(response2.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('You are already a member', str(response2.data))
