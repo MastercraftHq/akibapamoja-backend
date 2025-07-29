@@ -42,6 +42,7 @@ class Membership(models.Model):
 
     class Status(models.TextChoices):
         INVITED = 'invited', 'Invited'
+        PENDING = 'pending', 'Pending'
         ACTIVE = 'active', 'Active'
         REMOVED = 'removed', 'Removed'
 
@@ -56,7 +57,7 @@ class Membership(models.Model):
     status = models.CharField(
         max_length=20,
         choices=Status.choices,
-        default=Status.ACTIVE
+        default=Status.PENDING
     )
 
     joined_at = models.DateTimeField(auto_now_add=True)
