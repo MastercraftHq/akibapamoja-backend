@@ -112,9 +112,9 @@ class ContributionViewSet(viewsets.ModelViewSet):
             if is_admin:
                 ActivityLog.objects.create(
                     user=request.user,
+                    chama=contribution.chama,
                     action="delete_contribution",
-                    contribution=contribution,
-                    description=f"Admin deleted contribution ID {contribution.id}"
+                    details=f"Admin deleted contribution ID {contribution.id}"
                 )
                 contribution.delete()
                 return Response({"detail": "Contribution deleted successfully."}, status=status.HTTP_204_NO_CONTENT)
@@ -128,9 +128,9 @@ class ContributionViewSet(viewsets.ModelViewSet):
 
             ActivityLog.objects.create(
                 user=request.user,
+                chama=contribution.chama,
                 action="delete_contribution",
-                contribution=contribution,
-                description=f"Member deleted own contribution {contribution.id}"
+                details=f"Member deleted own contribution {contribution.id}"
             )
             contribution.delete()
             return Response({"detail": "Contribution deleted successfully."}, status=status.HTTP_204_NO_CONTENT)

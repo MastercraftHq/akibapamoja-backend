@@ -20,8 +20,8 @@ class ContributionAPITests(APITestCase):
             password='pass', email=f'outsider_{self._testMethodName}@example.com'
         )
         self.chama = Chama.objects.create(name='Test Chama', contribution_amount=100, contribution_day=1, maximum_members=50)
-        Membership.objects.create(user=self.member, chama=self.chama)
-        Membership.objects.create(user=self.admin, chama=self.chama)
+        Membership.objects.create(user=self.member, chama=self.chama, status=Membership.Status.ACTIVE, role=Membership.Role.MEMBER)
+        Membership.objects.create(user=self.admin, chama=self.chama, status=Membership.Status.ACTIVE, role=Membership.Role.ADMIN)
         self.client = APIClient()
         self.url = reverse('contributions-list') + f'?chama={self.chama.id}'
 
@@ -162,7 +162,7 @@ class ContributionAPITests(APITestCase):
         update_url = reverse('contributions-detail', kwargs={'pk': contribution.id}) + f'?chama={self.chama.id}'
         data = {'amount': 75}
         response = self.client.patch(update_url, data)
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
 
     def test_member_can_delete_own_pending_contribution(self):
         schedule = ContributionSchedule.objects.create(
@@ -252,6 +252,13 @@ class ContributionAPITests(APITestCase):
             amount=50, 
             method='MPESA'
         )
+        
+        # Ensure admin has ACTIVE membership with ADMIN role
+        admin_membership = self.chama.members.get(user=self.admin)
+        admin_membership.status = Membership.Status.ACTIVE
+        admin_membership.role = Membership.Role.ADMIN
+        admin_membership.save()
+        
         self.client.force_authenticate(user=self.admin)
         update_url = reverse('contributions-detail', kwargs={'pk': contribution.id}) + f'?chama={self.chama.id}'
         data = {'amount': 75, 'method': 'BANK', 'invalid_field': 'should_not_be_allowed'}
@@ -285,4 +292,3 @@ class ContributionAPITests(APITestCase):
         data = {'amount': 75}
         response = self.client.patch(update_url, data)
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
-
