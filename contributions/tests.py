@@ -201,7 +201,7 @@ class ContributionAPITests(APITestCase):
         self.client.force_authenticate(user=self.member)
         delete_url = reverse('contributions-detail', kwargs={'pk': contribution.id}) + f'?chama={self.chama.id}'
         response = self.client.delete(delete_url)
-        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
         self.assertTrue(Contribution.objects.filter(id=contribution.id).exists())
 
     def test_unauthenticated_user_forbidden_from_edit_endpoint(self):
@@ -256,9 +256,9 @@ class ContributionAPITests(APITestCase):
         update_url = reverse('contributions-detail', kwargs={'pk': contribution.id}) + f'?chama={self.chama.id}'
         data = {'amount': 75, 'method': 'BANK', 'invalid_field': 'should_not_be_allowed'}
         response = self.client.patch(update_url, data)
-        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn('error', response.data)
-        self.assertIn('invalid_field', str(response.data['error']))
+        self.assertIn('invalid_field', response.data['error'])
 
     def test_contribution_not_found_returns_404(self):
         self.client.force_authenticate(user=self.admin)
