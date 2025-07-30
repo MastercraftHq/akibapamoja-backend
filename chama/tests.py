@@ -22,11 +22,7 @@ class ChamaEndpointsTestCase(APITestCase):
         self.chama_data = {
             "name": "Savings Squad",
             "description": "Monthly savings group",
-            "contribution_amount": "1000.00",
-            "contribution_frequency": "monthly",
-            "contribution_day": 5,
             "currency": "KES",
-            "late_payment_fee": "100.00",
             "minimum_members": 1,
             "maximum_members": 10,
             "join_code": "JOIN1234"
@@ -87,11 +83,7 @@ class JoinChamaTests(APITestCase):
         self.user = User.objects.create_user(email="test@example.com", password="testpass")
         self.chama = Chama.objects.create(
             name="Test Chama",
-            contribution_amount=1000.00,
-            contribution_frequency="monthly",
-            contribution_day=5,
             currency="KES",
-            late_payment_fee=100.00,
             minimum_members=1,
             maximum_members=10,
             join_code="TEST1234"
