@@ -1,124 +1,79 @@
+import uuid
 from django.db import models
-from django.contrib.auth import get_user_model
 from django.utils import timezone
 from django.core.validators import MinValueValidator
-from chama.models import Chama, Membership
-import uuid
 
-User = get_user_model()
+from chama.models import Membership
 
 
 class ContributionSchedule(models.Model):
-    class Status(models.TextChoices):
-        PENDING = "PENDING", "Pending"
-        APPROVED = "APPROVED", "Approved"
-        DECLINED = "DECLINED", "Declined"
-
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    chama = models.ForeignKey(Chama, on_delete=models.CASCADE, related_name="contribution_schedules")
-    due_date = models.DateField()
-    expected_amount = models.DecimalField(max_digits=10, decimal_places=2)
-    status = models.CharField(max_length=10, choices=Status.choices, default=Status.PENDING)
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
+    """
+    Defines when and how much members should pay each period.
+    """
+    id              = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    chama           = models.ForeignKey('chama.Chama', on_delete=models.CASCADE, related_name='schedules')
+    due_date        = models.DateField()
+    expected_amount = models.DecimalField(max_digits=10, decimal_places=2, validators=[MinValueValidator(0.01)])
+    created_at      = models.DateTimeField(auto_now_add=True)
+    updated_at      = models.DateTimeField(auto_now=True)
 
     class Meta:
-        db_table = 'contribution_schedule'
-        unique_together = ['chama', 'due_date']
-        indexes = [
-            models.Index(fields=['due_date', 'status']),
+        db_table        = 'contribution_schedule'
+        unique_together = [('chama', 'due_date')]
+        indexes         = [
             models.Index(fields=['chama', 'due_date']),
+            models.Index(fields=['due_date']),
         ]
 
     def __str__(self):
-        return f"{self.chama.name} - {self.due_date} - {self.expected_amount} ({self.status})"
+        return f"{self.chama.name} due {self.due_date} → {self.expected_amount}"
 
 
 class Contribution(models.Model):
+    """
+    Records an individual member's payment (manual or M-Pesa).
+    """
     class PaymentMethod(models.TextChoices):
         MPESA = "MPESA", "M-Pesa"
-        BANK = "BANK", "Bank Transfer"
-        CASH = "CASH", "Cash"
+        BANK  = "BANK",  "Bank Transfer"
+        CASH  = "CASH",  "Cash"
 
     class Status(models.TextChoices):
-        PENDING = "PENDING", "Pending"
+        PENDING  = "PENDING",  "Pending"
         APPROVED = "APPROVED", "Approved"
         REJECTED = "REJECTED", "Rejected"
 
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    member = models.ForeignKey(Membership, on_delete=models.CASCADE, related_name="contributions")
-    chama = models.ForeignKey(Chama, on_delete=models.CASCADE, related_name="contributions")
-    contribution_cycle = models.ForeignKey(
-        'ContributionCycle',
-        on_delete=models.SET_NULL,
-        null=True,
-        blank=True,
-        related_name="contributions",
-    )
-    schedule = models.ForeignKey(ContributionSchedule, on_delete=models.CASCADE, related_name="contributions")
-    amount = models.DecimalField(max_digits=10, decimal_places=2, validators=[MinValueValidator(0.01)])
-    method = models.CharField(max_length=10, choices=PaymentMethod.choices, default=PaymentMethod.MPESA)
-    status = models.CharField(max_length=10, choices=Status.choices, default=Status.PENDING)
+    id               = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    schedule         = models.ForeignKey(ContributionSchedule, on_delete=models.CASCADE, related_name='contributions')
+    member           = models.ForeignKey(Membership, on_delete=models.CASCADE, related_name='contributions')
+    amount           = models.DecimalField(max_digits=10, decimal_places=2, validators=[MinValueValidator(0.01)])
+    method           = models.CharField(max_length=10, choices=PaymentMethod.choices, default=PaymentMethod.CASH)
+    status           = models.CharField(max_length=10, choices=Status.choices, default=Status.PENDING)
+    reference        = models.CharField(max_length=100, blank=True, unique=True)
     transaction_date = models.DateTimeField(default=timezone.now)
-    recorded_by = models.ForeignKey(User, on_delete=models.SET_NULL, null=True, related_name="recorded_contributions")
-    is_confirmed = models.BooleanField(default=False, editable=False)
-    confirmed_at = models.DateTimeField(null=True, blank=True)
-    reference = models.CharField(max_length=100, blank=True)
-    notes = models.TextField(blank=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
+    created_at       = models.DateTimeField(auto_now_add=True)
+    updated_at       = models.DateTimeField(auto_now=True)
 
     class Meta:
         db_table = 'contribution'
-        indexes = [
-            models.Index(fields=['chama', 'transaction_date']),
-            models.Index(fields=['member', 'transaction_date']),
+        indexes  = [
+            models.Index(fields=['schedule', 'transaction_date']),
+            models.Index(fields=['member',   'transaction_date']),
         ]
         ordering = ["-created_at"]
 
     def save(self, *args, **kwargs):
-        # Automatically set is_confirmed based on status
-        if self.status == self.Status.APPROVED:
-            self.is_confirmed = True
-            if not self.confirmed_at:
-                self.confirmed_at = timezone.now()
-        else:
-            self.is_confirmed = False
+        # auto-confirm on APPROVED if reference exists
+        # only require a reference on APPROVED for non-manual payments
+        if (
+            self.status == self.Status.APPROVED
+            and not self.reference
+            and self.method != Contribution.PaymentMethod.CASH
+        ):
+            raise ValueError("Approved contributions require a reference.")
         super().save(*args, **kwargs)
 
     def __str__(self):
-        member_name = self.member.user.username if self.member and self.member.user else "Unknown"
-        return f"{member_name} - {self.chama.name} - {self.amount} ({self.method}) on {self.transaction_date}"
-
-
-class ContributionCycle(models.Model):
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    chama = models.ForeignKey(Chama, on_delete=models.CASCADE, related_name="contribution_cycles")
-    cycle_number = models.PositiveIntegerField()
-    start_date = models.DateField()
-    end_date = models.DateField()
-    is_completed = models.BooleanField(default=False)
-    completed_at = models.DateTimeField(null=True, blank=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-
-    class Meta:
-        db_table = 'contribution_cycle'
-        unique_together = ['chama', 'cycle_number']
-        indexes = [
-            models.Index(fields=['chama', 'start_date']),
-            models.Index(fields=['is_completed']),
-        ]
-
-    @property
-    def expected_total(self):
-        active_members = self.chama.members.filter(status='active').count()
-        amount_per_schedule = self.chama.contribution_amount
-        return active_members * amount_per_schedule
-
-    @property
-    def collected_total(self):
-        return self.contributions.aggregate(total=models.Sum('amount'))['total'] or 0.00
-
-    def __str__(self):
-        return f"{self.chama.name} - Cycle {self.cycle_number} ({self.start_date} to {self.end_date})"
+        user  = self.member.user.username
+        name  = self.schedule.chama.name
+        return f"{user} → {name} | {self.amount} via {self.method}"

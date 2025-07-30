@@ -4,14 +4,19 @@ from django.conf import settings
 import random
 import string
 
+"""
+Model definitions for Chama-related entities.
+
+- Chama: Represents a community group. Core fields focus on group identity and constraints (e.g. name, max members).
+- ContributionSchedule: Now handles periodic contribution requirements separately from Chama logic.
+
+This module emphasizes modular separation between group definitions and financial scheduling logic.
+"""
+
 class Chama(models.Model):
     name = models.CharField(max_length=100)
     description = models.TextField(blank=True)
-    contribution_amount = models.DecimalField(max_digits=10, decimal_places=2)
-    contribution_frequency = models.CharField(max_length=20)
-    contribution_day = models.IntegerField()
     currency = models.CharField(max_length=10)
-    late_payment_fee = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     minimum_members = models.IntegerField(default=1)
     maximum_members = models.IntegerField()
     balance = models.DecimalField(max_digits=12, decimal_places=2, default=0)
@@ -42,6 +47,7 @@ class Membership(models.Model):
 
     class Status(models.TextChoices):
         INVITED = 'invited', 'Invited'
+        PENDING = 'pending', 'Pending'
         ACTIVE = 'active', 'Active'
         REMOVED = 'removed', 'Removed'
 
@@ -57,7 +63,7 @@ class Membership(models.Model):
     status = models.CharField(
         max_length=20,
         choices=Status.choices,
-        default=Status.ACTIVE
+        default=Status.PENDING
     )
 
     joined_at = models.DateTimeField(auto_now_add=True)

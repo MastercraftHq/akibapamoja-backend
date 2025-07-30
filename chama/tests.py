@@ -22,11 +22,7 @@ class ChamaEndpointsTestCase(APITestCase):
         self.chama_data = {
             "name": "Savings Squad",
             "description": "Monthly savings group",
-            "contribution_amount": "1000.00",
-            "contribution_frequency": "monthly",
-            "contribution_day": 5,
             "currency": "KES",
-            "late_payment_fee": "100.00",
             "minimum_members": 1,
             "maximum_members": 10,
             "join_code": "JOIN1234"
@@ -80,3 +76,53 @@ class ChamaEndpointsTestCase(APITestCase):
         self.client.force_authenticate(user=self.other_user)
         response = self.client.get(url)
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        
+class JoinChamaTests(APITestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.user = User.objects.create_user(email="test@example.com", password="testpass")
+        self.chama = Chama.objects.create(
+            name="Test Chama",
+            currency="KES",
+            minimum_members=1,
+            maximum_members=10,
+            join_code="TEST1234"
+        )
+        self.join_url = reverse("join-chama")
+
+    def test_join_chama_success(self):
+        self.client.force_authenticate(user=self.user)
+        data = {"join_code": "TEST1234"}
+        response = self.client.post(self.join_url, data, format="json")
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(response.data["message"], "Join request submitted successfully. Awaiting admin approval.")
+        membership = Membership.objects.get(user=self.user, chama=self.chama)
+        self.assertEqual(membership.status, Membership.Status.PENDING)
+        self.assertEqual(membership.role, Membership.Role.MEMBER)
+
+    def test_join_chama_already_member(self):
+        Membership.objects.create(user=self.user, chama=self.chama, role=Membership.Role.MEMBER, status=Membership.Status.ACTIVE)
+        self.client.force_authenticate(user=self.user)
+        data = {"join_code": "TEST1234"}
+        response = self.client.post(self.join_url, data, format="json")
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("You are already a member of this Chama.", response.data["non_field_errors"])
+
+    def test_join_chama_invalid_code(self):
+        self.client.force_authenticate(user=self.user)
+        data = {"join_code": "INVALID123"}
+        response = self.client.post(self.join_url, data, format="json")
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("Invalid join code.", response.data["join_code"])
+
+    def test_join_chama_missing_code(self):
+        self.client.force_authenticate(user=self.user)
+        data = {}
+        response = self.client.post(self.join_url, data, format="json")
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("This field is required.", response.data["join_code"])
+
+    def test_join_chama_unauthenticated(self):
+        data = {"join_code": "TEST1234"}
+        response = self.client.post(self.join_url, data, format="json")
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)

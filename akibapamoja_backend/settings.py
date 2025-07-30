@@ -30,7 +30,7 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-    'activity',
+    
     
     
     'django.contrib.admindocs',
@@ -39,9 +39,11 @@ INSTALLED_APPS = [
     'users',
     'contributions',
     'chama',
+    'activity',
 
     # Third-party
     # 'corsheaders',
+    #'django-extensions',
     'rest_framework',
     "rest_framework_simplejwt",
     "drf_yasg",
@@ -64,8 +66,9 @@ REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": (
         "rest_framework_simplejwt.authentication.JWTAuthentication",
     ),
+    # Remove the DEFAULT_PERMISSION_CLASSES or set it to AllowAny
     "DEFAULT_PERMISSION_CLASSES": [
-        "rest_framework.permissions.IsAuthenticated",
+        "rest_framework.permissions.AllowAny",  # Changed from IsAuthenticated
     ],
 }
 
