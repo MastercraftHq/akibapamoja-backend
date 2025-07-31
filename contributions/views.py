@@ -78,7 +78,9 @@ class ContributionViewSet(viewsets.ModelViewSet):
 
     def partial_update(self, request, *args, **kwargs):
         contribution = self.get_object()
-        is_admin, _ = IsChamaMember._check_permissions(self, contribution)
+        permission_checker = IsChamaMember()
+        permission_checker.request = self.request
+        is_admin, _ = permission_checker._check_permissions(contribution)
 
         if not is_admin:
             raise PermissionDenied("Only admins can update contributions.")
@@ -94,8 +96,9 @@ class ContributionViewSet(viewsets.ModelViewSet):
 
     def destroy(self, request, *args, **kwargs):
         contribution = self.get_object()
-        is_admin, _ = self._check_permissions(contribution)
-
+        permission_checker = IsChamaMember()
+        permission_checker.request = self.request
+        is_admin, _ = permission_checker._check_permissions(contribution)
         with transaction.atomic():
             # Admin can delete any contribution
             if is_admin:
