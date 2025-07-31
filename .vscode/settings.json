@@ -1,0 +1,13 @@
+{
+    "sqltools.connections": [
+        {
+            "previewLimit": 50,
+            "server": "localhost",
+            "port": 5432,
+            "driver": "PostgreSQL",
+            "name": "Akiba_backend",
+            "database": "akiba",
+            "username": "akiba"
+        }
+    ]
+}

@@ -75,21 +75,10 @@ class ContributionViewSet(viewsets.ModelViewSet):
             details=f"Manual contribution of KES {serializer.validated_data['amount']:.2f}"
         )
 
-    def _check_permissions(self, contribution):
-        """Check if user has permission to update/delete a contribution."""
-        try:
-            membership = Membership.objects.get(user=self.request.user, chama=contribution.chama)
-        except Membership.DoesNotExist:
-            raise PermissionDenied("You are not a member of this Chama.")
-        
-        if membership.status != Membership.Status.ACTIVE:
-            raise PermissionDenied("Only users with ACTIVE membership can perform this action.")
-        
-        return membership.role == Membership.Role.ADMIN, membership
 
     def partial_update(self, request, *args, **kwargs):
         contribution = self.get_object()
-        is_admin, _ = self._check_permissions(contribution)
+        is_admin, _ = IsChamaMember._check_permissions(self, contribution)
 
         if not is_admin:
             raise PermissionDenied("Only admins can update contributions.")
@@ -119,13 +108,8 @@ class ContributionViewSet(viewsets.ModelViewSet):
                 contribution.delete()
                 return Response({"detail": "Contribution deleted successfully."}, status=status.HTTP_204_NO_CONTENT)
 
-            # Members can only delete their own PENDING or FAILED contributions
-            if contribution.member.user != request.user:
-                raise PermissionDenied("You can only delete your own contributions.")
-
-            if contribution.status not in [Contribution.Status.PENDING, Contribution.Status.FAILED]:
-                raise PermissionDenied("Only pending or rejected contributions can be deleted.")
-
+            #Check that members can only delete their own PENDING or FAILED contributions
+            IsChamaMember().partial_update_permission(request, contribution)
             ActivityLog.objects.create(
                 user=request.user,
                 chama=contribution.chama,
