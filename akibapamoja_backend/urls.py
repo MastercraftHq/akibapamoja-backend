@@ -5,6 +5,9 @@ from drf_yasg.views import get_schema_view
 from rest_framework import permissions
 from django.conf import settings
 from django.conf.urls.static import static
+from rest_framework.routers import DefaultRouter
+from contributions.views import ContributionViewSet
+
 
 schema_view = get_schema_view(
     openapi.Info(
@@ -19,6 +22,8 @@ schema_view = get_schema_view(
     permission_classes=(permissions.AllowAny,),
     authentication_classes=[],
 )
+router = DefaultRouter()
+router.register(r'chamas/(?P<chama_id>\d+)/contributions', ContributionViewSet, basename='contributions')
 
 urlpatterns = [
     path("", schema_view.with_ui('swagger', cache_timeout=0), name='schema-swagger-ui'),
@@ -27,8 +32,9 @@ urlpatterns = [
     path('admin/', admin.site.urls),
 
     path('api/users/', include("users.urls")),
-    path('api/contributions/', include("contributions.urls")),
     path('api/', include("chama.urls")),
+    path('api/', include(router.urls)),
+
 ]
 
 if settings.DEBUG:
