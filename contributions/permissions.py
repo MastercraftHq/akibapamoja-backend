@@ -20,25 +20,28 @@ class IsChamaMember(permissions.BasePermission):
             return False
             
         return self._is_member(request.user, chama_id)
-
-    def _check_permissions(self, contribution):
-        # Check if user has permission to update/delete a contribution
-        try:
-            membership = Membership.objects.get(user=self.request.user, chama=contribution.chama)
-        except Membership.DoesNotExist:
-            raise PermissionDenied("You are not a member of this Chama.")
-        
-        if membership.status != Membership.Status.ACTIVE:
-            raise PermissionDenied("Only users with ACTIVE membership can perform this action.")
-        
-        return membership.role == Membership.Role.ADMIN, membership
     
-    def partial_update_permission(self, request, contribution):
-        # Memebrs can only delete their own PENDING or FAILED contributions
-        if contribution.member.user != request.user:
-            raise PermissionDenied("You can only delete your own contributions.")
+    def _get_membership(self, request, contribution):
+        try:
+            return Membership.objects.get(user=request.user, chama=contribution.chama)
+        except Membership.DoesNotExist:
+            raise PermissionDenied("You are not a member of this chama.")
         
-        if contribution.status not in [Contribution.Status.PENDING, Contribution.Status.FAILED]:
-            raise PermissionDenied("Only pending or rejected contributions can be deleted.")
+    def has_object_permission(self, request, view, obj):
+        # Handle update (PATCH/PUT) permissions
+        # Only admins can update contributions
+        if request.method in ['PATCH', 'PUT']:
+            membership = self._get_membership(request=request, contribution=obj)
+            if membership.role != Membership.Role.ADMIN.value:
+                raise PermissionDenied("Only admins can update contributions.")
+            return True
         
-        return True
+        # Handle delete permissions
+        # Users can only delete their own contributions that are pending or failed
+        if request.method == "DELETE":
+            if obj.member.user != request.user:
+                raise PermissionDenied("You can only delete your own contributions.")
+            if obj.status not in [Contribution.Status.PENDING, Contribution.Status.FAILED]:
+                raise PermissionDenied("You can only delete PENDING or FAILED contributions.")
+            return True
+        return False

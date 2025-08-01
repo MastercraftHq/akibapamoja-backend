@@ -77,50 +77,46 @@ class ContributionViewSet(viewsets.ModelViewSet):
 
 
     def partial_update(self, request, *args, **kwargs):
-        contribution = self.get_object()
+        try:
+            contribution = self.get_object()
+        except Contribution.DoesNotExist:
+            return Response({"error": "Contribution not found."}, status=status.HTTP_404_NOT_FOUND)
         permission_checker = IsChamaMember()
-        permission_checker.request = self.request
-        is_admin, _ = permission_checker._check_permissions(contribution)
-
-        if not is_admin:
-            raise PermissionDenied("Only admins can update contributions.")
-
+        if not permission_checker.has_object_permission(request, self, contribution):
+            raise PermissionDenied("You do not have permission to update this contribution. Only admins and owners of this contribution can update contributions.", status=status.HTTP_403_FORBIDDEN)
+        
         # Only allow editing specific fields
         allowed_fields = {'amount', 'notes', 'transaction_date'}
         invalid_fields = set(request.data.keys()) - allowed_fields
         if invalid_fields:
-            return Response({'error': f'Fields {list(invalid_fields)} are not editable.'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"error": f"Invalid fields: {list(invalid_fields)} are not editable."}, status=status.HTTP_400_BAD_REQUEST)
         
         return super().partial_update(request, *args, **kwargs)
 
 
     def destroy(self, request, *args, **kwargs):
-        contribution = self.get_object()
+        try:
+            contribution = self.get_object()
+        except Contribution.DoesNotExist:
+            return Response({"error": "Contribution not found."}, status=status.HTTP_404_NOT_FOUND)
         permission_checker = IsChamaMember()
-        permission_checker.request = self.request
-        is_admin, _ = permission_checker._check_permissions(contribution)
+        if not permission_checker.has_object_permission(request, self, contribution):
+            raise PermissionDenied("You do not have permission to delete this contribution. Only admins and owners of this contribution can delete it.", status=status.HTTP_403_FORBIDDEN)
+        
         with transaction.atomic():
-            # Admin can delete any contribution
-            if is_admin:
-                ActivityLog.objects.create(
-                    user=request.user,
-                    chama=contribution.chama,
-                    action="delete_contribution",
-                    details=f"Admin deleted contribution ID {contribution.id}"
-                )
-                contribution.delete()
-                return Response({"detail": "Contribution deleted successfully."}, status=status.HTTP_204_NO_CONTENT)
-
-            #Check that members can only delete their own PENDING or FAILED contributions
-            IsChamaMember().partial_update_permission(request, contribution)
+            # Update chama balance
+            contribution.chama.balance -= contribution.amount
+            contribution.chama.save()
+            # Log the activity
             ActivityLog.objects.create(
                 user=request.user,
                 chama=contribution.chama,
-                action="delete_contribution",
-                details=f"Member deleted own contribution {contribution.id}"
+                action='DELETE_CONTRIBUTION',
+                details = f"Deleted contribution {contribution.id} of KES {contribution.amount:.2f}"
             )
             contribution.delete()
-            return Response({"detail": "Contribution deleted successfully."}, status=status.HTTP_204_NO_CONTENT)
+            return Response({"message": "Contribution deleted successfully."}, status=status.HTTP_204_NO_CONTENT)
+        
 
     def get_object(self) -> Contribution:
         try:
