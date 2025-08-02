@@ -3,6 +3,8 @@ from rest_framework.decorators import api_view, permission_classes
 from rest_framework.exceptions import PermissionDenied, NotFound
 from rest_framework.response import Response
 from django.views.decorators.csrf import csrf_exempt
+from rest_framework.exceptions import ValidationError
+from .models import ContributionSchedule
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from django.db import transaction
@@ -60,7 +62,10 @@ class ContributionViewSet(viewsets.ModelViewSet):
         if not Membership.objects.filter(user=self.request.user, chama=chama).exists():
             raise PermissionDenied("You are not a member of this Chama.")
         
-        contribution = serializer.save(chama=chama, status='SUCCESS')
+        contribution = serializer.save(
+            chama=chama,
+            status='SUCCESS'
+        )
         
         # Update chama balance
         chama.balance += contribution.amount

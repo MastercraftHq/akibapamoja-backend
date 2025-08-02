@@ -48,7 +48,12 @@ class ContributionScheduleSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'due_date', 'expected_amount',
             'status', 'chama', 'is_overdue', 'amount_paid',
-            'amount_remaining', 'created_at'
+            'amount_remaining', 'created_at', 'updated_at'
+        ]
+        read_only_fields = [
+            'id', 'chama',
+            'is_overdue', 'amount_paid', 
+            'amount_remaining', 'created_at', 'updated_at'
         ]
         
     def get_is_overdue(self, obj):
