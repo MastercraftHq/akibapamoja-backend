@@ -26,6 +26,12 @@ class ContributionAPITests(APITestCase):
         self.url = reverse('contributions-list') + f'?chama={self.chama.id}'
 
     def test_member_can_submit_manual_contribution(self):
+        """
+        Sets up a ContributionSchedule instance to define the expected contribution
+        parameters (amount and due date) for the Chama group. This replaces legacy
+        logic from the Chama model, allowing dynamic control over contributions.
+        """
+
         schedule = ContributionSchedule.objects.create(
             chama=self.chama,
             due_date=timezone.now().date(),
