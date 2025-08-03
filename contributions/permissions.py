@@ -12,15 +12,13 @@ class IsChamaMember(permissions.BasePermission):
 
     def has_permission(self, request, view):
         chama_id = view.kwargs.get('chama_id') or request.data.get('chama_id')
+        
         if not chama_id:
             return False
+        
         return Membership.objects.filter(
             user=request.user,
             chama_id=chama_id,
             status=Membership.Status.ACTIVE
         ).exists()
-
-
-    
-            # Get chama_id from query params or request data
 
