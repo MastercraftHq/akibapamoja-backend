@@ -32,9 +32,8 @@ urlpatterns = [
     path('admin/', admin.site.urls),
 
     path('api/users/', include("users.urls")),
-    path('api/', include("chama.urls")),
-    path('api/', include(router.urls)),
-
+    path('api/chama/', include("chama.urls")),
+    path('api/contributions/', include("contributions.urls")),
 ]
 
 if settings.DEBUG:
