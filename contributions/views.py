@@ -16,10 +16,12 @@ from .utils import get_user_by_phone, get_chama_for_user
 
 class ContributionViewSet(viewsets.ModelViewSet):
     serializer_class   = ContributionSerializer
-    permission_classes = [permissions.IsAuthenticated, IsChamaMember]
     filter_backends    = [filters.OrderingFilter]
     ordering           = ['-created_at']
-
+    
+    def get_permissions(self):
+        return [permissions.IsAuthenticated(), IsChamaMember()]
+    
     def get_queryset(self):
         # Get chama_id from query params
         chama_id = self.request.query_params.get('chama')
@@ -63,28 +65,21 @@ class ContributionViewSet(viewsets.ModelViewSet):
         
         contribution = serializer.save(chama=chama, status='SUCCESS')
         
-        # Update chama balance
-        chama.balance += contribution.amount
-        chama.save()
+        with transaction.atomic():
+            # Update chama balance
+            chama.balance += contribution.amount
+            chama.save()
         
-        # Log the activity
-        ActivityLog.objects.create(
-            user=self.request.user,
-            chama=chama,
-            action='CONTRIBUTION',
-            details=f"Manual contribution of KES {serializer.validated_data['amount']:.2f}"
-        )
+            # Log the activity
+            ActivityLog.objects.create(
+                user=self.request.user,
+                chama=chama,
+                action='CONTRIBUTION',
+                details=f"Manual contribution of KES {serializer.validated_data['amount']:.2f}"
+            )
 
 
-    def partial_update(self, request, *args, **kwargs):
-        try:
-            contribution = self.get_object()
-        except Contribution.DoesNotExist:
-            return Response({"error": "Contribution not found."}, status=status.HTTP_404_NOT_FOUND)
-        permission_checker = IsChamaMember()
-        if not permission_checker.has_object_permission(request, self, contribution):
-            raise PermissionDenied("You do not have permission to update this contribution. Only admins and owners of this contribution can update contributions.", status=status.HTTP_403_FORBIDDEN)
-        
+    def partial_update(self, request, *args, **kwargs):        
         # Only allow editing specific fields
         allowed_fields = {'amount', 'notes', 'transaction_date'}
         invalid_fields = set(request.data.keys()) - allowed_fields
@@ -95,13 +90,10 @@ class ContributionViewSet(viewsets.ModelViewSet):
 
 
     def destroy(self, request, *args, **kwargs):
-        try:
-            contribution = self.get_object()
-        except Contribution.DoesNotExist:
-            return Response({"error": "Contribution not found."}, status=status.HTTP_404_NOT_FOUND)
-        permission_checker = IsChamaMember()
-        if not permission_checker.has_object_permission(request, self, contribution):
-            raise PermissionDenied("You do not have permission to delete this contribution. Only admins and owners of this contribution can delete it.", status=status.HTTP_403_FORBIDDEN)
+        contribution = self.get_object()
+        
+        if contribution.status not in [Contribution.Status.PENDING, Contribution.Status.FAILED]:
+            return Response({"error": "Only PENDING or FAILED contributions can be deleted."}, status=status.HTTP_400_BAD_REQUEST)
         
         with transaction.atomic():
             # Update chama balance

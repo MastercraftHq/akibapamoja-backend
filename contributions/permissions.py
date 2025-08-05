@@ -37,11 +37,13 @@ class IsChamaMember(permissions.BasePermission):
             return True
         
         # Handle delete permissions
-        # Users can only delete their own contributions that are pending or failed
+        # Admins can delete any contribution
+        # Users can only delete their own contributions that are pending or rejected
         if request.method == "DELETE":
-            if obj.member.user != request.user:
-                raise PermissionDenied("You can only delete your own contributions.")
-            if obj.status not in [Contribution.Status.PENDING, Contribution.Status.FAILED]:
-                raise PermissionDenied("You can only delete PENDING or FAILED contributions.")
-            return True
-        return False
+            membership = self._get_membership(request=request, contribution=obj)
+            if membership.role == Membership.Role.ADMIN.value:
+                return True
+            if membership.role == Membership.Role.MEMBER.value and obj.status in [Contribution.Status.PENDING, Contribution.Status.REJECTED]:
+                return True
+            raise PermissionDenied("You are not authorized to delete this contribution.")
+        
