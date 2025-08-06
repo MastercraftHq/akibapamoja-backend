@@ -6,7 +6,7 @@ from django.utils import timezone
 
 
 class MpesaDarajaClient:
-    base_url        = "https://sandbox.safaricom.co.ke"
+    mpesa_base_url        = os.getenv("MPESA_BASE_URL")
     consumer_key    = os.getenv("MPESA_CONSUMER_KEY")
     consumer_secret = os.getenv("MPESA_CONSUMER_SECRET")
     shortcode       = os.getenv("MPESA_SHORTCODE")        # e.g. "174379"
@@ -15,7 +15,7 @@ class MpesaDarajaClient:
     @classmethod
     def get_token(cls):
         resp = requests.get(
-            f"{cls.base_url}/oauth/v1/generate?grant_type=client_credentials",
+            f"{cls.mpesa_base_url}/oauth/v1/generate?grant_type=client_credentials",
             auth=HTTPBasicAuth(cls.consumer_key, cls.consumer_secret)
         )
         resp.raise_for_status()
@@ -44,7 +44,7 @@ class MpesaDarajaClient:
             "Content-Type": "application/json"
         }
         resp = requests.post(
-            f"{cls.base_url}/mpesa/stkpush/v1/processrequest",
+            f"{cls.mpesa_base_url}/mpesa/stkpush/v1/processrequest",
             json=payload, headers=headers
         )
         resp.raise_for_status()

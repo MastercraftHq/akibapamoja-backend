@@ -1,10 +1,30 @@
 from rest_framework import serializers
 from chama.models import Membership, Chama
-from contributions.models import Contribution, ContributionSchedule
+from contributions.models import Contribution, ContributionSchedule, ContributionCycle
 
+class ContributionCycleSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ContributionCycle
+        fields = [
+            'id',
+            'name',
+            'frequency',
+            'custom_days',
+            'created_at',
+            'updated_at',
+        ]
+        read_only_fields = ['id', 'created_at', 'updated_at']
 
 class ContributionScheduleSerializer(serializers.ModelSerializer):
     chama_name = serializers.CharField(source='chama.name', read_only=True)
+    cycle = ContributionCycleSerializer(read_only=True)
+    cycle_id = serializers.PrimaryKeyRelatedField(
+        queryset=ContributionCycle.objects.all(),
+        source='cycle',
+        write_only=True,
+        required=False,
+        allow_null=True
+    )
 
     class Meta:
         model = ContributionSchedule
@@ -12,12 +32,14 @@ class ContributionScheduleSerializer(serializers.ModelSerializer):
             'id',
             'chama',
             'chama_name',
+            'cycle',
+            'cycle_id',
             'due_date',
             'expected_amount',
             'created_at',
             'updated_at',
         ]
-        read_only_fields = ['id', 'created_at', 'updated_at', 'chama_name']
+        read_only_fields = ['id', 'created_at', 'updated_at', 'chama_name', 'cycle']
 
 
 class ContributionSerializer(serializers.ModelSerializer):

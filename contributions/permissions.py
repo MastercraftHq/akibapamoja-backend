@@ -25,7 +25,7 @@ class IsChamaMember(permissions.BasePermission):
         return is_member or request.user.is_staff
 
 
-class IsAdminChamaMember(permissions.BasePermission):
+class IsChamaAdminOrTreasurer(permissions.BasePermission):
     """
     Allows only staff users—but we’ll also check chama membership
     inside the action method itself.

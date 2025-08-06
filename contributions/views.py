@@ -9,6 +9,7 @@ from rest_framework.decorators import action, api_view, authentication_classes, 
 from rest_framework.exceptions import ValidationError, PermissionDenied, NotFound
 from rest_framework.response import Response
 from contributions.services.mpesa import MpesaDarajaClient
+from .permissions import IsChamaMember, IsChamaAdminOrTreasurer
 from django.urls import reverse
 from django.utils import timezone
 import requests
@@ -110,22 +111,11 @@ class ContributionViewSet(viewsets.ModelViewSet):
         output = ContributionSerializer(contrib, context={'request': request}).data
         return Response(output, status=status.HTTP_201_CREATED)
 
-    @action(detail=True, methods=['patch'], url_path='update-status')
+    @action(detail=True, methods=['patch'], url_path='update-status', 
+            permission_classes=[IsChamaAdminOrTreasurer])
     def update_status(self, request, pk=None):
-        """
-        Only chama ADMIN/TREASURER may change status of PENDING contributions.
-        """
         contrib = self.get_object()
-        user    = request.user
-
-        # verify admin/treasurer role
-        if not Membership.objects.filter(
-            user=user,
-            chama=contrib.schedule.chama,
-            role__in=[Membership.Role.ADMIN, Membership.Role.TREASURER]
-        ).exists():
-            raise PermissionDenied("Only chama admins or treasurers can update status.")
-
+        
         # only pending may change
         if contrib.status != Contribution.Status.PENDING:
             raise ValidationError({'status': 'Only pending contributions can be updated.'})
@@ -136,13 +126,13 @@ class ContributionViewSet(viewsets.ModelViewSet):
 
         with transaction.atomic():
             serializer.save()
-            # bump balance on approval
             if new_status == Contribution.Status.APPROVED:
                 chama = contrib.schedule.chama
                 chama.balance = F('balance') + contrib.amount
                 chama.save(update_fields=['balance'])
 
         return Response({'detail': 'Status updated successfully.'}, status=status.HTTP_200_OK)
+
 
     @action(detail=False, methods=['post'], url_path='initiate-mpesa')
     def initiate_mpesa(self, request):
@@ -151,19 +141,16 @@ class ContributionViewSet(viewsets.ModelViewSet):
         """
         user = request.user
         schedule_id = request.data.get('schedule')
-        amount      = request.data.get('amount')
+        amount = request.data.get('amount')
 
-        # Validate schedule & membership
+        # Validate schedule
         try:
             schedule_uuid = uuid.UUID(schedule_id)
             schedule = ContributionSchedule.objects.get(id=schedule_uuid)
         except (ValueError, DjangoValidationError, ContributionSchedule.DoesNotExist):
             raise ValidationError({'schedule': 'Invalid schedule ID.'})
-        except Membership.DoesNotExist:
-            raise PermissionDenied('Not a member of this Chama.')
-        
 
-        # verify membership
+        # Validate membership
         try:
             Membership.objects.get(user=user, chama=schedule.chama)
         except Membership.DoesNotExist:
@@ -188,11 +175,11 @@ class ContributionViewSet(viewsets.ModelViewSet):
 
         return Response({
             'CheckoutRequestID': resp.get('CheckoutRequestID'),
-            'ResponseCode':      resp.get('ResponseCode'),
+            'ResponseCode': resp.get('ResponseCode'),
             'ResponseDescription': resp.get('ResponseDescription'),
             'MerchantRequestID': resp.get('MerchantRequestID'),
-            'reference':         reference
-        }, status=200)
+            'reference': reference
+        }, status=status.HTTP_200_OK)
 
 @api_view(['POST'])  # must be outermost
 @authentication_classes([])  # disables auth
@@ -222,6 +209,8 @@ def mpesa_callback(request):
     try:
         user = User.objects.get(phone=phone)
     except User.DoesNotExist:
+        user = User.objects.filter(email=phone)
+    if not user:
         raise NotFound("User not found.")
 
     try:

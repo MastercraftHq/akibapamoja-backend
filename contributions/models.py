@@ -2,25 +2,69 @@ import uuid
 from django.db import models
 from django.utils import timezone
 from django.core.validators import MinValueValidator
+from django.core.exceptions import ValidationError
 
 from chama.models import Membership
+
+class ContributionCycle(models.Model):
+    """
+    Defines the frequency of contributions (e.g., weekly, monthly).
+    """
+    class Frequency(models.TextChoices):
+        WEEKLY = "WEEKLY", "Weekly"
+        MONTHLY = "MONTHLY", "Monthly"
+        QUARTERLY = "QUARTERLY", "Quarterly"
+        YEARLY = "YEARLY", "Yearly"
+        CUSTOM = "CUSTOM", "Custom"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    name = models.CharField(max_length=100)
+    frequency = models.CharField(max_length=10, choices=Frequency.choices)
+    custom_days = models.PositiveIntegerField(
+        null=True, 
+        blank=True,
+        help_text="Required if frequency is CUSTOM (number of days between contributions)"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = 'contribution_cycle'
+        ordering = ['name']
+
+    def clean(self):
+        if self.frequency == self.Frequency.CUSTOM and not self.custom_days:
+            raise ValidationError("Custom frequency requires custom_days to be set.")
+        if self.frequency != self.Frequency.CUSTOM and self.custom_days:
+            raise ValidationError("custom_days should only be set for CUSTOM frequency.")
+
+    def __str__(self):
+        return f"{self.name} ({self.get_frequency_display()})"
+
 
 
 class ContributionSchedule(models.Model):
     """
     Defines when and how much members should pay each period.
     """
-    id              = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    chama           = models.ForeignKey('chama.Chama', on_delete=models.CASCADE, related_name='schedules')
-    due_date        = models.DateField()
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    chama = models.ForeignKey('chama.Chama', on_delete=models.CASCADE, related_name='schedules')
+    cycle = models.ForeignKey(
+        'ContributionCycle',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='schedules'
+    )
+    due_date = models.DateField()
     expected_amount = models.DecimalField(max_digits=10, decimal_places=2, validators=[MinValueValidator(0.01)])
-    created_at      = models.DateTimeField(auto_now_add=True)
-    updated_at      = models.DateTimeField(auto_now=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
-        db_table        = 'contribution_schedule'
+        db_table = 'contribution_schedule'
         unique_together = [('chama', 'due_date')]
-        indexes         = [
+        indexes = [
             models.Index(fields=['chama', 'due_date']),
             models.Index(fields=['due_date']),
         ]
