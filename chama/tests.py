@@ -25,10 +25,7 @@ class ChamaEndpointsTestCase(APITestCase):
             "currency": "KES",
             "minimum_members": 1,
             "maximum_members": 10,
-            "join_code": "JOIN1234",
-            "contribution_amount": 100.00,
-            "contribution_frequency": "monthly", 
-            "contribution_day": 5 
+            "join_code": "JOIN1234"
         }
         response = self.client.post(self.create_chama_url, self.chama_data, format='json')
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
@@ -90,10 +87,7 @@ class JoinChamaTests(APITestCase):
             currency="KES",
             minimum_members=1,
             maximum_members=10,
-            join_code="TEST1234",
-            contribution_amount=Decimal('100.00'),  
-            contribution_frequency="monthly",  
-            contribution_day=5  
+            join_code="TEST1234"
         )
         self.join_url = reverse("join-chama")
 
