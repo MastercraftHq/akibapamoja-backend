@@ -6,6 +6,7 @@ from django.contrib.auth import get_user_model
 from django.utils import timezone
 from chama.models import Chama, Membership
 from contributions.models import Contribution, ContributionSchedule
+from decimal import Decimal 
 
 User = get_user_model()
 
@@ -28,7 +29,10 @@ class ContributionAPITests(APITestCase):
             maximum_members=50,
             balance=0,
             is_active=True,
-            join_code='TEST1234'
+            join_code='TEST1234',
+            contribution_amount=Decimal('100.00'),  
+            contribution_frequency="monthly",  
+            contribution_day=5  
         )
         self.member_membership = Membership.objects.create(
             user=self.member,

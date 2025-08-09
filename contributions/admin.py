@@ -1,3 +1,7 @@
 from django.contrib import admin
+from .models import ContributionSchedule, Contribution, ActivityLog, ContributionCycle
 
-# Register your models here.
+admin.site.register(ContributionSchedule)
+admin.site.register(Contribution)
+admin.site.register(ActivityLog)
+admin.site.register(ContributionCycle)
