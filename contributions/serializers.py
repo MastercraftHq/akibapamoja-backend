@@ -1,117 +1,109 @@
 from rest_framework import serializers
-from django.utils import timezone
-from django.db import models
-from .models import Contribution, ContributionCycle, ContributionSchedule
-from chama.models import Membership
-from django.contrib.auth import get_user_model
+from chama.models import Membership, Chama
+from contributions.models import Contribution, ContributionSchedule, ContributionCycle
 
-User = get_user_model()
-
-class ContributionSerializer(serializers.ModelSerializer):
-    
-    member = serializers.ReadOnlyField(source="member.id")
-    user = serializers.ReadOnlyField(source="member.user.id")
-    status = serializers.ReadOnlyField()
-
+class ContributionCycleSerializer(serializers.ModelSerializer):
     class Meta:
-        model = Contribution
+        model = ContributionCycle
         fields = [
-            "id", "member", "user", "chama", "schedule", "amount", "method",
-            "reference", "status", "notes", "created_at"
+            'id',
+            'name',
+            'frequency',
+            'custom_days',
+            'created_at',
+            'updated_at',
         ]
-        read_only_fields = ["id", "member", "user", "status", "created_at"]
+        read_only_fields = ['id', 'created_at', 'updated_at']
 
-        def validate_amount(self, value):
-            if value <= 0:
-                raise serializers.ValidationError("Amount must be grater than 0")
-            raise value
-        
-        def validate_member_id(self, value):
-            chama = self.context.get('chama')
-            if not Membership.objects.filter(
-                chama=chama, id=value
-            ).exists():
-                raise serializers.ValidationError("Member does not belong to this chama.")
-        
-        def create(self, validated_data):
-            validated_data["chama"] = self.context["chama"] 
-            validated_data["member"] = self.context["member"]
-            return super().create(validated_data)
-        
 class ContributionScheduleSerializer(serializers.ModelSerializer):
-    is_overdue = serializers.SerializerMethodField()
-    amount_paid = serializers.SerializerMethodField()
-    amount_remaining = serializers.SerializerMethodField()
-    
+    chama_name = serializers.CharField(source='chama.name', read_only=True)
+    cycle = ContributionCycleSerializer(read_only=True)
+    cycle_id = serializers.PrimaryKeyRelatedField(
+        queryset=ContributionCycle.objects.all(),
+        source='cycle',
+        write_only=True,
+        required=False,
+        allow_null=True
+    )
+
     class Meta:
         model = ContributionSchedule
         fields = [
-            'id', 'due_date', 'expected_amount',
-            'status', 'chama', 'is_overdue', 'amount_paid',
-            'amount_remaining', 'created_at'
+            'id',
+            'chama',
+            'chama_name',
+            'cycle',
+            'cycle_id',
+            'due_date',
+            'expected_amount',
+            'created_at',
+            'updated_at',
         ]
-        
-    def get_is_overdue(self, obj):
-        return obj.due_date < timezone.now().date() and obj.status in ['PENDING', 'PARTIAL']
-    
-    def get_amount_paid(self, obj):
-        contributions = Contribution.objects.filter(
-            schedule=obj,
-            is_confirmed=True
-        ).aggregate(total=models.Sum('amount'))
-        return contributions['total'] or 0.00
-    
-    def get_amount_remaining(self, obj):
-        amount_paid = self.get_amount_paid(obj)
-        return obj.expected_amount - amount_paid if obj.expected_amount else 0.00
-    
-class ContributionCreateSerializer(serializers.ModelSerializer):
-    member_id = serializers.UUIDField(required=False)
-    schedule_id = serializers.UUIDField(required=True)
-    
+        read_only_fields = ['id', 'created_at', 'updated_at', 'chama_name', 'cycle']
+
+
+class ContributionSerializer(serializers.ModelSerializer):
+    member_username   = serializers.CharField(source='member.user.username', read_only=True)
+    schedule_due_date = serializers.DateField(source='schedule.due_date',    read_only=True)
+    chama_name        = serializers.CharField(source='schedule.chama.name',  read_only=True)
+
     class Meta:
         model = Contribution
         fields = [
-            'member_id', 'schedule_id', 'amount', 'method', 'transaction_date',
-            'notes', 'reference'
+            'id',
+            'schedule',
+            'schedule_due_date',
+            'chama_name',
+            'member',
+            'member_username',
+            'amount',
+            'method',
+            'status',
+            'reference',
+            'transaction_date',
+            'created_at',
+            'updated_at',
         ]
-        
-    def validate_member_id(self, value):
-        if value is None:
-            return None
-        chama = self.context.get('chama')
-        try:
-            member = chama.members.get(id=value)
-        except Membership.DoesNotExist:
-            raise serializers.ValidationError("Member does not belong to this chama.")
-        return member.id
-    
-    def validate_schedule_id(self, value):
-        chama = self.context.get('chama')
-        try:
-            schedule = chama.contribution_schedules.get(id=value)
-        except ContributionSchedule.DoesNotExist:
-            raise serializers.ValidationError("Schedule does not belong to this chama.")
-        return schedule.id
-    
-    def create(self, validated_data):
-        member_id = validated_data.pop('member_id', None)
-        schedule_id = validated_data.pop('schedule_id')
-        chama = self.context.get('chama')
-        
-        # Get the schedule
-        schedule = chama.contribution_schedules.get(id=schedule_id)
-        validated_data['schedule'] = schedule
-        
-        if member_id:
-            # Admin creating contribution for specific member
-            member = chama.members.get(id=member_id)
-            validated_data['member'] = member
-        else:
-            # User creating contribution for themselves
-            user = self.context['request'].user
-            member = chama.members.get(user=user)
-            validated_data['member'] = member
-            
-        validated_data['chama'] = chama
-        return super().create(validated_data)
+        read_only_fields = [
+            'id', 'created_at', 'updated_at',
+            'member_username', 'schedule_due_date', 'chama_name'
+        ]
+
+    def validate(self, attrs):
+        status    = attrs.get('status') or self.instance.status
+        reference = attrs.get('reference') or self.instance.reference
+
+        if status == Contribution.Status.APPROVED and not reference:
+            raise serializers.ValidationError("Approved contributions require a reference.")
+        return attrs
+
+
+class ContributionCreateSerializer(serializers.ModelSerializer):
+    method = serializers.ChoiceField(choices=Contribution.PaymentMethod.choices, default=Contribution.PaymentMethod.CASH)
+
+    class Meta:
+        model = Contribution
+        fields = [
+            'schedule',
+            'amount',
+            'method',
+        ]
+
+    def validate(self, attrs):
+        method = attrs.get('method') or Contribution.PaymentMethod.CASH
+        if method == Contribution.PaymentMethod.MPESA:
+            raise serializers.ValidationError({
+                'method': 'Use M-Pesa callback for MPESA transactions.'
+            })
+        return attrs
+
+
+class ContributionStatusUpdateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Contribution
+        fields = ['status']
+
+    def validate_status(self, value):
+        if self.instance.status != Contribution.Status.PENDING:
+            raise serializers.ValidationError("Only pending contributions can be updated.")
+        return value

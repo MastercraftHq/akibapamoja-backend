@@ -15,8 +15,8 @@ SECRET_KEY = os.environ.get('SECRET_KEY')
 DEBUG = os.environ.get('DEBUG', 'True') == 'True'
 ALLOWED_HOSTS = ['*']
 
-# Custom user model
 AUTH_USER_MODEL = 'users.User'
+
 
 # Custom authentication backend
 AUTHENTICATION_BACKENDS = [
@@ -34,15 +34,18 @@ INSTALLED_APPS = [
     'django.contrib.staticfiles',
     
     
+    
     'django.contrib.admindocs',
 
     # Local apps
     'users',
     'contributions',
     'chama',
+    #'activity',
 
     # Third-party
     # 'corsheaders',
+    #'django-extensions',
     'rest_framework',
     "rest_framework_simplejwt",
     "drf_yasg",
@@ -66,8 +69,9 @@ REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": (
         "rest_framework_simplejwt.authentication.JWTAuthentication",
     ),
+    # Remove the DEFAULT_PERMISSION_CLASSES or set it to AllowAny
     "DEFAULT_PERMISSION_CLASSES": [
-        "rest_framework.permissions.IsAuthenticated",
+        "rest_framework.permissions.AllowAny",  # Changed from IsAuthenticated
     ],
 }
 

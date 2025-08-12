@@ -1,20 +1,35 @@
 from rest_framework import permissions
-from chama.models import Chama
+from .models import Membership
 
 class IsChamaMember(permissions.BasePermission):
-    """Only members of the chama can create / view contributions."""
-
-    def _is_member(self, user, chama_id):
-        return Chama.objects.filter(
-            id=chama_id,
-            members__user=user
-        ).exists()
+    """
+    Allows access if the authenticated user is a member of the specified chama
+    (or is staff, for listing purposes).
+    """
 
     def has_permission(self, request, view):
-        # Get chama_id from query params or request data
-        chama_id = request.query_params.get("chama") or request.data.get("chama")
-        
+        if not request.user or not request.user.is_authenticated:
+            return False
+
+        # update_status action uses its own permissions
+        if view.action == "update_status":
+            return True
+
+        chama_id = request.query_params.get("chama")
         if not chama_id:
             return False
-            
-        return self._is_member(request.user, chama_id)
+
+        is_member = Membership.objects.filter(
+            user=request.user, chama_id=chama_id
+        ).exists()
+        return is_member or request.user.is_staff
+
+
+class IsChamaAdminOrTreasurer(permissions.BasePermission):
+    """
+    Allows only staff users—but we’ll also check chama membership
+    inside the action method itself.
+    """
+
+    def has_permission(self, request, view):
+        return bool(request.user and request.user.is_authenticated and request.user.is_staff)
