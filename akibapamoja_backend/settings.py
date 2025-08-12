@@ -39,7 +39,7 @@ INSTALLED_APPS = [
     'users',
     'contributions',
     'chama',
-    'activity',
+    #'activity',
 
     # Third-party
     # 'corsheaders',
