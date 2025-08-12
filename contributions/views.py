@@ -16,7 +16,7 @@ import requests
 from rest_framework.decorators import authentication_classes
 
 from chama.models import Membership
-from .models import Contribution, ContributionSchedule
+from .models import Contribution, ContributionSchedule, ActivityLog
 from .serializers import (
     ContributionSerializer,
     ContributionCreateSerializer,
@@ -40,7 +40,7 @@ class ContributionViewSet(viewsets.ModelViewSet):
         """
         qs = Contribution.objects.select_related('schedule__chama', 'member__user')
 
-        #+for update_status we want to fetch any contribution
+        # for update_status we want to fetch any contribution
         if self.action == 'update_status':
             return qs
 
@@ -81,8 +81,8 @@ class ContributionViewSet(viewsets.ModelViewSet):
         serializer.is_valid(raise_exception=True)
 
         schedule = serializer.validated_data['schedule']
-        amount   = serializer.validated_data['amount']
-        method   = serializer.validated_data.get('method') or Contribution.PaymentMethod.CASH
+        amount = serializer.validated_data['amount']
+        method = serializer.validated_data.get('method') or Contribution.PaymentMethod.CASH
 
         # verify membership
         try:
@@ -105,7 +105,16 @@ class ContributionViewSet(viewsets.ModelViewSet):
                 member=membership,
                 amount=amount,
                 method=Contribution.PaymentMethod.CASH,
-                status=status_val
+                status=status_val,
+                recorded_by=request.user
+            )
+
+            # Log activity
+            ActivityLog.objects.create(
+                user=request.user,
+                chama=schedule.chama,
+                action='CONTRIBUTION',
+                details=f"Created cash contribution of {amount} for schedule {schedule.id}"
             )
 
         output = ContributionSerializer(contrib, context={'request': request}).data
@@ -126,18 +135,35 @@ class ContributionViewSet(viewsets.ModelViewSet):
 
         with transaction.atomic():
             serializer.save()
+            
             if new_status == Contribution.Status.APPROVED:
                 chama = contrib.schedule.chama
                 chama.balance = F('balance') + contrib.amount
                 chama.save(update_fields=['balance'])
 
-        return Response({'detail': 'Status updated successfully.'}, status=status.HTTP_200_OK)
+                # Log activity for approved contribution
+                ActivityLog.objects.create(
+                    user=request.user,
+                    chama=chama,
+                    action='CONTRIBUTION',
+                    details=f"Approved contribution of {contrib.amount} from {contrib.member.user.email}"
+                )
 
+            elif new_status == Contribution.Status.REJECTED:
+                # Log activity for rejected contribution
+                ActivityLog.objects.create(
+                    user=request.user,
+                    chama=contrib.schedule.chama,
+                    action='CONTRIBUTION',
+                    details=f"Rejected contribution of {contrib.amount} from {contrib.member.user.email}"
+                )
+
+        return Response({'detail': 'Status updated successfully.'}, status=status.HTTP_200_OK)
 
     @action(detail=False, methods=['post'], url_path='initiate-mpesa')
     def initiate_mpesa(self, request):
         """
-        Kick off an STK Push for a member’s scheduled contribution.
+        Kick off an STK Push for a member's scheduled contribution.
         """
         user = request.user
         schedule_id = request.data.get('schedule')
@@ -170,6 +196,14 @@ class ContributionViewSet(viewsets.ModelViewSet):
                 reference=reference,
                 callback_url=callback_url
             )
+            
+            # Log M-Pesa initiation activity
+            ActivityLog.objects.create(
+                user=user,
+                chama=schedule.chama,
+                action='CONTRIBUTION',
+                details=f"Initiated M-Pesa payment of {amount} for schedule {schedule.id}"
+            )
         except requests.HTTPError as e:
             raise ValidationError({'mpesa': 'Failed to initiate STK Push.'})
 
@@ -191,18 +225,18 @@ def mpesa_callback(request):
     """
     print(">>> mpesa_callback view HIT")
     required = ['phone', 'amount', 'reference', 'chama_id', 'schedule_id']
-    missing  = [f for f in required if not request.data.get(f)]
+    missing = [f for f in required if not request.data.get(f)]
     if missing:
         return Response(
             {'error': f"Missing required fields: {', '.join(missing)}"},
             status=status.HTTP_400_BAD_REQUEST
         )
 
-    phone     = request.data['phone']
+    phone = request.data['phone']
     reference = request.data['reference'].strip()
-    amount    = request.data['amount']
+    amount = request.data['amount']
     schedule_id = request.data['schedule_id']
-    chama_id  = request.data['chama_id']
+    chama_id = request.data['chama_id']
 
     # lookup user & membership
     from users.models import User
@@ -218,12 +252,11 @@ def mpesa_callback(request):
     except (ContributionSchedule.DoesNotExist, ValueError, DjangoValidationError):
         raise ValidationError({'schedule_id': 'Invalid schedule or Chama ID.'})
 
-    # 3) ensure the user actually belongs to that Chama
+    # ensure the user actually belongs to that Chama
     try:
         membership = Membership.objects.get(user=user, chama_id=chama_id)
     except Membership.DoesNotExist:
         raise PermissionDenied("User is not a member of this Chama.")
-
 
     # enforce idempotency
     if Contribution.objects.filter(
@@ -243,11 +276,20 @@ def mpesa_callback(request):
             amount=amount,
             method=Contribution.PaymentMethod.MPESA,
             status=Contribution.Status.APPROVED,
-            reference=reference
+            reference=reference,
+            recorded_by=user
         )
         chama = schedule.chama
         chama.balance = F('balance') + contrib.amount
         chama.save(update_fields=['balance'])
+
+        # Log successful M-Pesa contribution
+    ActivityLog.objects.create(
+        user=user,
+        chama=chama,
+        action='CONTRIBUTION',
+        details=f"Received M-Pesa contribution of {amount} from {user.email}"
+    )
 
     return Response(
         {'status': 'success', 'message': 'M-Pesa contribution recorded.'},
