@@ -1,4 +1,5 @@
-from rest_framework import viewsets, permissions, filters
+import logging
+from rest_framework import viewsets, permissions, filters, status
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.exceptions import PermissionDenied, NotFound
 from rest_framework.response import Response
@@ -15,10 +16,12 @@ from .utils import get_user_by_phone, get_chama_for_user
 
 class ContributionViewSet(viewsets.ModelViewSet):
     serializer_class   = ContributionSerializer
-    permission_classes = [permissions.IsAuthenticated, IsChamaMember]
     filter_backends    = [filters.OrderingFilter]
     ordering           = ['-created_at']
-
+    
+    def get_permissions(self):
+        return [permissions.IsAuthenticated(), IsChamaMember()]
+    
     def get_queryset(self):
         # Get chama_id from query params
         chama_id = self.request.query_params.get('chama')
@@ -62,17 +65,60 @@ class ContributionViewSet(viewsets.ModelViewSet):
         
         contribution = serializer.save(chama=chama, status='SUCCESS')
         
-        # Update chama balance
-        chama.balance += contribution.amount
-        chama.save()
+        with transaction.atomic():
+            # Update chama balance
+            chama.balance += contribution.amount
+            chama.save()
         
-        # Log the activity
-        ActivityLog.objects.create(
-            user=self.request.user,
-            chama=chama,
-            action='CONTRIBUTION',
-            details=f"Manual contribution of KES {serializer.validated_data['amount']:.2f}"
-        )
+            # Log the activity
+            ActivityLog.objects.create(
+                user=self.request.user,
+                chama=chama,
+                action='CONTRIBUTION',
+                details=f"Manual contribution of KES {serializer.validated_data['amount']:.2f}"
+            )
+
+
+    def partial_update(self, request, *args, **kwargs):        
+        # Only allow editing specific fields
+        allowed_fields = {'amount', 'notes', 'transaction_date'}
+        invalid_fields = set(request.data.keys()) - allowed_fields
+        if invalid_fields:
+            return Response({"error": f"Invalid fields: {list(invalid_fields)} are not editable."}, status=status.HTTP_400_BAD_REQUEST)
+        
+        return super().partial_update(request, *args, **kwargs)
+
+
+    def destroy(self, request, *args, **kwargs):
+        contribution = self.get_object()
+        
+        if contribution.status not in [Contribution.Status.PENDING, Contribution.Status.FAILED]:
+            return Response({"error": "Only PENDING or FAILED contributions can be deleted."}, status=status.HTTP_400_BAD_REQUEST)
+        
+        with transaction.atomic():
+            # Update chama balance
+            contribution.chama.balance -= contribution.amount
+            contribution.chama.save()
+            # Log the activity
+            ActivityLog.objects.create(
+                user=request.user,
+                chama=contribution.chama,
+                action='DELETE_CONTRIBUTION',
+                details = f"Deleted contribution {contribution.id} of KES {contribution.amount:.2f}"
+            )
+            contribution.delete()
+            return Response({"message": "Contribution deleted successfully."}, status=status.HTTP_204_NO_CONTENT)
+        
+
+    def get_object(self) -> Contribution:
+        try:
+            obj = super().get_object()
+        except NotFound as e:
+            lookup_field = getattr(self, 'lookup_field', 'pk')
+            lookup_value = self.kwargs.get(lookup_field, None)
+            logging.warning(f"Contribution retrieval failed for {lookup_field}={lookup_value}: {e}")
+            raise NotFound(f"Contribution with {lookup_field}={lookup_value} not found.")
+        return obj
         
 @csrf_exempt
 @api_view(['POST'])

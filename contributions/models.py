@@ -44,6 +44,7 @@ class Contribution(models.Model):
         PENDING = "PENDING", "Pending"
         SUCCESS = "APPROVED", "Approved"
         FAILED = "DECLINED", "Declined"
+        REJECTED = "REJECTED", "Rejected"
     
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     member    = models.ForeignKey('chama.Membership', on_delete=models.CASCADE, related_name="contributions", null=True)

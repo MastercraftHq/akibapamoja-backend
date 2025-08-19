@@ -19,9 +19,9 @@ class ContributionAPITests(APITestCase):
         self.non_member = User.objects.create_user(
             password='pass', email=f'outsider_{self._testMethodName}@example.com'
         )
-        self.chama = Chama.objects.create(name='Test Chama', maximum_members=50)
-        Membership.objects.create(user=self.member, chama=self.chama)
-        Membership.objects.create(user=self.admin, chama=self.chama)
+        self.chama = Chama.objects.create(name='Test Chama', currency='KES', maximum_members=50)
+        Membership.objects.create(user=self.member, chama=self.chama, status=Membership.Status.ACTIVE, role=Membership.Role.MEMBER)
+        Membership.objects.create(user=self.admin, chama=self.chama, status=Membership.Status.ACTIVE, role=Membership.Role.ADMIN)
         self.client = APIClient()
         self.url = reverse('contributions-list') + f'?chama={self.chama.id}'
 
@@ -109,3 +109,192 @@ class ContributionAPITests(APITestCase):
         response = self.client.post(self.url, data)
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         self.assertTrue(Contribution.objects.filter(member__user=self.admin, chama=self.chama).exists())
+
+    def test_admin_can_successfully_edit_contribution(self):
+        schedule = ContributionSchedule.objects.create(
+            chama=self.chama,
+            due_date=timezone.now().date(),
+            expected_amount=100
+        )
+        contribution = Contribution.objects.create(
+            member=self.chama.members.get(user=self.member), 
+            chama=self.chama, 
+            schedule=schedule, 
+            amount=50, 
+            method='MPESA'
+        )
+        self.client.force_authenticate(user=self.admin)
+        update_url = reverse('contributions-detail', kwargs={'pk': contribution.id}) + f'?chama={self.chama.id}'
+        data = {'amount': 75, 'notes': 'Updated by admin'}
+        response = self.client.patch(update_url, data)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        contribution.refresh_from_db()
+        self.assertEqual(contribution.amount, 75)
+        self.assertEqual(contribution.notes, 'Updated by admin')
+
+    def test_admin_can_successfully_delete_any_contribution(self):
+        schedule = ContributionSchedule.objects.create(
+            chama=self.chama,
+            due_date=timezone.now().date(),
+            expected_amount=100
+        )
+        contribution = Contribution.objects.create(
+            member=self.chama.members.get(user=self.member), 
+            chama=self.chama, 
+            schedule=schedule, 
+            amount=50, 
+            method='MPESA'
+        )
+        self.client.force_authenticate(user=self.admin)
+        delete_url = reverse('contributions-detail', kwargs={'pk': contribution.id}) + f'?chama={self.chama.id}'
+        response = self.client.delete(delete_url)
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+        self.assertFalse(Contribution.objects.filter(id=contribution.id).exists())
+
+    def test_member_cannot_edit_any_contribution(self):
+        schedule = ContributionSchedule.objects.create(
+            chama=self.chama,
+            due_date=timezone.now().date(),
+            expected_amount=100
+        )
+        contribution = Contribution.objects.create(
+            member=self.chama.members.get(user=self.member), 
+            chama=self.chama, 
+            schedule=schedule, 
+            amount=50, 
+            method='MPESA'
+        )
+        self.client.force_authenticate(user=self.member)
+        update_url = reverse('contributions-detail', kwargs={'pk': contribution.id}) + f'?chama={self.chama.id}'
+        data = {'amount': 75}
+        response = self.client.patch(update_url, data)
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+
+    def test_member_can_delete_own_pending_contribution(self):
+        schedule = ContributionSchedule.objects.create(
+            chama=self.chama,
+            due_date=timezone.now().date(),
+            expected_amount=100
+        )
+        contribution = Contribution.objects.create(
+            member=self.chama.members.get(user=self.member), 
+            chama=self.chama, 
+            schedule=schedule, 
+            amount=50, 
+            method='MPESA',
+            status='PENDING'
+        )
+        self.client.force_authenticate(user=self.member)
+        delete_url = reverse('contributions-detail', kwargs={'pk': contribution.id}) + f'?chama={self.chama.id}'
+        response = self.client.delete(delete_url)
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+        self.assertFalse(Contribution.objects.filter(id=contribution.id).exists())
+
+    def test_member_cannot_delete_non_pending_contribution(self):
+        schedule = ContributionSchedule.objects.create(
+            chama=self.chama,
+            due_date=timezone.now().date(),
+            expected_amount=100
+        )
+        contribution = Contribution.objects.create(
+            member=self.chama.members.get(user=self.member), 
+            chama=self.chama, 
+            schedule=schedule, 
+            amount=50, 
+            method='MPESA',
+            status='APPROVED'
+        )
+        self.client.force_authenticate(user=self.member)
+        delete_url = reverse('contributions-detail', kwargs={'pk': contribution.id}) + f'?chama={self.chama.id}'
+        response = self.client.delete(delete_url)
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertTrue(Contribution.objects.filter(id=contribution.id).exists())
+
+    def test_unauthenticated_user_forbidden_from_edit_endpoint(self):
+        schedule = ContributionSchedule.objects.create(
+            chama=self.chama,
+            due_date=timezone.now().date(),
+            expected_amount=100
+        )
+        contribution = Contribution.objects.create(
+            member=self.chama.members.get(user=self.member), 
+            chama=self.chama, 
+            schedule=schedule, 
+            amount=50, 
+            method='MPESA'
+        )
+        update_url = reverse('contributions-detail', kwargs={'pk': contribution.id}) + f'?chama={self.chama.id}'
+        data = {'amount': 75}
+        response = self.client.patch(update_url, data)
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_unauthenticated_user_forbidden_from_delete_endpoint(self):
+        schedule = ContributionSchedule.objects.create(
+            chama=self.chama,
+            due_date=timezone.now().date(),
+            expected_amount=100
+        )
+        contribution = Contribution.objects.create(
+            member=self.chama.members.get(user=self.member), 
+            chama=self.chama, 
+            schedule=schedule, 
+            amount=50, 
+            method='MPESA'
+        )
+        delete_url = reverse('contributions-detail', kwargs={'pk': contribution.id}) + f'?chama={self.chama.id}'
+        response = self.client.delete(delete_url)
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_invalid_fields_in_update_trigger_validation_errors(self):
+        schedule = ContributionSchedule.objects.create(
+            chama=self.chama,
+            due_date=timezone.now().date(),
+            expected_amount=100
+        )
+        contribution = Contribution.objects.create(
+            member=self.chama.members.get(user=self.member), 
+            chama=self.chama, 
+            schedule=schedule, 
+            amount=50, 
+            method='MPESA'
+        )
+        
+        # Ensure admin has ACTIVE membership with ADMIN role
+        admin_membership = self.chama.members.get(user=self.admin)
+        admin_membership.status = Membership.Status.ACTIVE
+        admin_membership.role = Membership.Role.ADMIN
+        admin_membership.save()
+        
+        self.client.force_authenticate(user=self.admin)
+        update_url = reverse('contributions-detail', kwargs={'pk': contribution.id}) + f'?chama={self.chama.id}'
+        data = {'amount': 75, 'method': 'BANK', 'invalid_field': 'should_not_be_allowed'}
+        response = self.client.patch(update_url, data)
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn('error', response.data)
+        self.assertIn('invalid_field', response.data['error'])
+
+    def test_contribution_not_found_returns_404(self):
+        self.client.force_authenticate(user=self.admin)
+        update_url = reverse('contributions-detail', kwargs={'pk': 99999}) + f'?chama={self.chama.id}'
+        data = {'amount': 75}
+        response = self.client.patch(update_url, data)
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_unauthorized_access_returns_403(self):
+        schedule = ContributionSchedule.objects.create(
+            chama=self.chama,
+            due_date=timezone.now().date(),
+            expected_amount=100
+        )
+        contribution = Contribution.objects.create(
+            member=self.chama.members.get(user=self.member), 
+            chama=self.chama, 
+            schedule=schedule, 
+            amount=50, 
+            method='MPESA'
+        )
+        self.client.force_authenticate(user=self.non_member)
+        update_url = reverse('contributions-detail', kwargs={'pk': contribution.id}) + f'?chama={self.chama.id}'
+        data = {'amount': 75}
+        response = self.client.patch(update_url, data)
+        self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
