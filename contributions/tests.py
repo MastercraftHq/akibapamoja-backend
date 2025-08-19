@@ -149,7 +149,7 @@ class ContributionAPITests(APITestCase):
         delete_url = reverse('contributions-detail', kwargs={'pk': contribution.id}) + f'?chama={self.chama.id}'
         response = self.client.delete(delete_url)
         self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
-        self.assertTrue(Contribution.objects.filter(id=contribution.id).exists())
+        self.assertFalse(Contribution.objects.filter(id=contribution.id).exists())
 
     def test_member_cannot_edit_any_contribution(self):
         schedule = ContributionSchedule.objects.create(
