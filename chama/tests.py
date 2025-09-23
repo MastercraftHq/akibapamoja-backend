@@ -2,8 +2,8 @@ from django.urls import reverse
 from rest_framework.test import APITestCase, APIClient
 from rest_framework import status
 from django.contrib.auth import get_user_model
-
 from chama.models import Chama, Membership
+from decimal import Decimal
 
 User = get_user_model()
 
@@ -31,7 +31,7 @@ class ChamaEndpointsTestCase(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
 
         self.chama = Chama.objects.first()
-        self.group_id = self.chama.id
+        self.chama_id = self.chama.id  # Renamed to chama_id for consistency
 
         # Add admin membership (created automatically on POST /groups)
         self.admin_membership = Membership.objects.get(user=self.admin_user, chama=self.chama)
@@ -43,14 +43,14 @@ class ChamaEndpointsTestCase(APITestCase):
         self.assertEqual(Chama.objects.count(), 1)
 
     def test_get_chama_detail(self):
-        url = reverse("chama-detail", kwargs={"pk": self.group_id})
+        url = reverse("chama-detail", kwargs={"chama_id": self.chama_id})  # Changed from "pk" to "chama_id"
         self.client.force_authenticate(user=self.admin_user)
         response = self.client.get(url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["name"], "Savings Squad")
 
     def test_add_member_as_admin(self):
-        url = reverse("add-member", kwargs={"groupId": self.group_id})
+        url = reverse("add-member", kwargs={"chama_id": self.chama_id})  # Changed from "groupId" to "chama_id"
         self.client.force_authenticate(user=self.admin_user)
         data = {"email": "out@example.com", "role": "member"}
         response = self.client.post(url, data, format="json")
@@ -58,25 +58,26 @@ class ChamaEndpointsTestCase(APITestCase):
         self.assertEqual(Membership.objects.filter(chama=self.chama).count(), 3)
 
     def test_add_member_as_non_admin_fails(self):
-        url = reverse("add-member", kwargs={"groupId": self.group_id})
+        url = reverse("add-member", kwargs={"chama_id": self.chama_id})  # Changed from "groupId" to "chama_id"
         self.client.force_authenticate(user=self.member_user)
         data = {"email": "out@example.com"}
         response = self.client.post(url, data, format="json")
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
 
     def test_list_members_as_member(self):
-        url = reverse("list-members", kwargs={"groupId": self.group_id})
+        url = reverse("list-members", kwargs={"chama_id": self.chama_id})  # Changed from "groupId" to "chama_id"
         self.client.force_authenticate(user=self.member_user)
         response = self.client.get(url)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(len(response.data), 2)
 
     def test_list_members_as_non_member_fails(self):
-        url = reverse("list-members", kwargs={"groupId": self.group_id})
+        url = reverse("list-members", kwargs={"chama_id": self.chama_id})  # Changed from "groupId" to "chama_id"
         self.client.force_authenticate(user=self.other_user)
         response = self.client.get(url)
         self.assertEqual(response.status_code, status.HTTP_403_FORBIDDEN)
-        
+
+# JoinChamaTests 
 class JoinChamaTests(APITestCase):
     def setUp(self):
         self.client = APIClient()

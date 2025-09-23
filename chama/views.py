@@ -30,14 +30,23 @@ class ChamaDetailView(generics.RetrieveAPIView):
     serializer_class = ChamaSerializer
     queryset = Chama.objects.all()
     permission_classes = [IsAuthenticated]
-
+    lookup_field = 'id' 
+    
+    def get_object(self):
+        
+        queryset = self.get_queryset()
+        chama_id = self.kwargs.get(self.lookup_url_kwarg or 'chama_id')
+        if chama_id is None:
+            raise AttributeError("No chama_id provided in URL")
+        filter_kwargs = {self.lookup_field: chama_id}  
+        return get_object_or_404(queryset, **filter_kwargs)
 
 class AddMemberView(generics.CreateAPIView):
     serializer_class = MembershipSerializer
     permission_classes = [IsAuthenticated, IsChamaAdmin]
 
     def create(self, request, *args, **kwargs):
-        chama = get_object_or_404(Chama, id=kwargs['groupId'])
+        chama = get_object_or_404(Chama, id=kwargs['chama_id'])
 
         email = request.data.get('email')
         role = request.data.get('role', Membership.Role.MEMBER)
@@ -57,7 +66,7 @@ class ListMembersView(generics.ListAPIView):
     permission_classes = [IsAuthenticated, IsChamaMember]
 
     def get_queryset(self):
-        chama = get_object_or_404(Chama, id=self.kwargs['groupId'])
+        chama = get_object_or_404(Chama, id=self.kwargs['chama_id'])
         return Membership.objects.filter(chama=chama)
 
 class JoinChamaView(generics.GenericAPIView):
