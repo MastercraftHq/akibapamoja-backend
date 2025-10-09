@@ -7,11 +7,7 @@ import string
 class Chama(models.Model):
     name = models.CharField(max_length=100)
     description = models.TextField(blank=True)
-    contribution_amount = models.DecimalField(max_digits=10, decimal_places=2)
-    contribution_frequency = models.CharField(max_length=20)
-    contribution_day = models.IntegerField()
     currency = models.CharField(max_length=10)
-    late_payment_fee = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     minimum_members = models.IntegerField(default=1)
     maximum_members = models.IntegerField()
     balance = models.DecimalField(max_digits=12, decimal_places=2, default=0)
@@ -19,6 +15,7 @@ class Chama(models.Model):
     created_at = models.DateField(auto_now_add=True)
     updated_at = models.DateField(auto_now=True)
     join_code = models.CharField(max_length=12, unique=True)
+
 
     def save(self, *args, **kwargs):
         if not self.join_code:
@@ -42,6 +39,7 @@ class Membership(models.Model):
 
     class Status(models.TextChoices):
         INVITED = 'invited', 'Invited'
+        PENDING = 'pending', 'Pending'
         ACTIVE = 'active', 'Active'
         REMOVED = 'removed', 'Removed'
 
@@ -56,7 +54,7 @@ class Membership(models.Model):
     status = models.CharField(
         max_length=20,
         choices=Status.choices,
-        default=Status.ACTIVE
+        default=Status.PENDING
     )
 
     joined_at = models.DateTimeField(auto_now_add=True)

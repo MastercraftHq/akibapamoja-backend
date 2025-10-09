@@ -6,6 +6,7 @@ from rest_framework import permissions
 from django.conf import settings
 from django.conf.urls.static import static
 
+
 schema_view = get_schema_view(
     openapi.Info(
         title="Akiba Pamoja API",
@@ -20,6 +21,7 @@ schema_view = get_schema_view(
     authentication_classes=[],
 )
 
+
 urlpatterns = [
     path("", schema_view.with_ui('swagger', cache_timeout=0), name='schema-swagger-ui'),
     
@@ -27,8 +29,8 @@ urlpatterns = [
     path('admin/', admin.site.urls),
 
     path('api/users/', include("users.urls")),
-    path('api/contributions/', include("contributions.urls")),
-    path('api/', include("chama.urls")),
+    path('api/chama/', include("chama.urls")),
+    path('api/', include("contributions.urls")),
 ]
 
 if settings.DEBUG:
