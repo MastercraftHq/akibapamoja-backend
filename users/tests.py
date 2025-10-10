@@ -1,6 +1,7 @@
 from rest_framework import status
 from rest_framework.test import APITestCase
 from django.urls import reverse
+from django.test import override_settings
 from users.models import User
 
 
@@ -8,6 +9,9 @@ class UserTests(APITestCase):
     def setUp(self):
         self.register_url = reverse("auth-list")
         self.login_url = reverse("auth-login")
+        self.logout_url = reverse("auth-logout")
+        self.obtain_pair_url = reverse("token_obtain_pair")
+        self.refresh_url = reverse("token_refresh")
         self.me_url = reverse("me-profile")
         self.user_data = {
             "first_name": "Test",
@@ -30,6 +34,7 @@ class UserTests(APITestCase):
         response = self.client.post(self.register_url, self.user_data)
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         self.assertIn("authToken", response.data)
+        self.assertIn("refreshToken", response.data)
         self.assertEqual(response.data["userId"], str(User.objects.get(email=self.user_data["email"]).id))
 
     def test_register_failure_missing_all_identifiers(self):
@@ -58,6 +63,7 @@ class UserTests(APITestCase):
         })
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertIn("authToken", response.data)
+        self.assertIn("refreshToken", response.data)
 
     def test_login_success_phone(self):
         response = self.client.post(self.login_url, {
@@ -66,6 +72,7 @@ class UserTests(APITestCase):
         })
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertIn("authToken", response.data)
+        self.assertIn("refreshToken", response.data)
 
     def test_login_failure_invalid_password(self):
         response = self.client.post(self.login_url, {
@@ -92,6 +99,58 @@ class UserTests(APITestCase):
         })
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
 
+    # --- Logout Tests ---
+
+    def test_logout_success(self):
+        self.authenticate()
+        response = self.client.post(self.logout_url, {
+            "refresh": self.refresh_token
+        })
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn("message", response.data)
+
+    def test_logout_failure_invalid_token(self):
+        response = self.client.post(self.logout_url, {
+            "refresh": "invalid_token"
+        })
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+
+    # --- Obtain Pair Tests ---
+
+    def test_obtain_pair_success(self):
+        response = self.client.post(self.obtain_pair_url, {
+            "email": "existing@example.com",
+            "password": "StrongPass123"
+        })
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn("access", response.data)
+        self.assertIn("refresh", response.data)
+        self.assertIn("message", response.data)
+
+    def test_obtain_pair_failure_invalid_credentials(self):
+        response = self.client.post(self.obtain_pair_url, {
+            "email": "existing@example.com",
+            "password": "WrongPassword"
+        })
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    # --- Refresh Tests ---
+
+    def test_refresh_success(self):
+        self.authenticate()
+        response = self.client.post(self.refresh_url, {
+            "refresh": self.refresh_token
+        })
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn("access", response.data)
+        self.assertIn("message", response.data)
+
+    def test_refresh_failure_invalid_token(self):
+        response = self.client.post(self.refresh_url, {
+            "refresh": "invalid_token"
+        })
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
     # --- Profile Tests ---
 
     def authenticate(self):
@@ -100,6 +159,7 @@ class UserTests(APITestCase):
             "password": "StrongPass123"
         })
         self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {response.data['authToken']}")
+        self.refresh_token = response.data['refreshToken']
 
     def test_get_profile_success(self):
         self.authenticate()
@@ -119,6 +179,7 @@ class UserTests(APITestCase):
             "phone": "0799999999"
         })
         self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn("message", response.data)
         self.assertEqual(response.data["user"]["phone"], "0799999999")
         self.assertEqual(response.data["user"]["first_name"], "Updated")
 
@@ -128,6 +189,7 @@ class UserTests(APITestCase):
             "first_name": "Partial"
         })
         self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn("message", response.data)
         self.assertEqual(response.data["user"]["first_name"], "Partial")
 
     def test_update_profile_invalid_data(self):
