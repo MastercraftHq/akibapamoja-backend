@@ -103,11 +103,11 @@ class LogoutSerializer(serializers.Serializer):
 
     def validate_refresh(self, value):
         """ Validate refresh token is valid before blacklisting """
-        token = RefreshToken(value)
-        # Check if token is already blacklisted
-        if BlacklistedToken.objects.filter(token__jti=token['jti']).exists():
-            raise serializers.ValidationError("Token is already blacklisted.")
-        
+        # The underlying library will handle already blacklisted tokens gracefully.
+        try:
+            RefreshToken(value)
+        except Exception:
+            raise serializers.ValidationError("Invalid or malformed refresh token.")
         return value
 
 

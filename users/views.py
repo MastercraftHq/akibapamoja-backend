@@ -39,7 +39,10 @@ class UserViewSet(viewsets.ViewSet):
         serializer = RegisterSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
 
-        user = serializer.save()
+        try:
+            user = serializer.save()
+        except Exception as e:
+            raise RegistrationError(detail=str(e))
 
         refresh = RefreshToken.for_user(user)
         return response.Response({
@@ -75,13 +78,19 @@ class UserViewSet(viewsets.ViewSet):
         """
         Logout user by blacklisting the refresh token.
         """
-        serializer = LogoutSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        
         refresh_token = serializer.validated_data.get("refresh")
-        token = RefreshToken(refresh_token)
-        token.blacklist()
+        try:
+            token = RefreshToken(refresh_token)
+            token.blacklist()
+        except Exception as e:
+            return response.Response(
+                {"error": "Invalid or expired refresh token."},
+                status=status.HTTP_400_BAD_REQUEST
+            )
         
+        return response.Response({
+            "message": "Successfully logged out."
+        }, status=status.HTTP_200_OK)
         return response.Response({
             "message": "Successfully logged out."
         }, status=status.HTTP_200_OK)
