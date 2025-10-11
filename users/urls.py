@@ -13,8 +13,8 @@ me = MeViewSet.as_view({
 })
 
 urlpatterns = [
-    path('', include(router.urls)),
     path('me/', me, name='me-profile'),
     path('auth/obtain-pair/', LoginObtainPairView.as_view(), name='token_obtain_pair'),
     path('auth/refresh/', LoginRefreshView.as_view(), name='token_refresh'),
+    path('', include(router.urls)),
 ]

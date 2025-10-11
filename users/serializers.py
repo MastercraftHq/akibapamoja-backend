@@ -101,12 +101,17 @@ class LoginSerializer(serializers.Serializer):
 class LogoutSerializer(serializers.Serializer):
     refresh = serializers.CharField(required=True, help_text="Refresh token to blacklist")
 
+from rest_framework_simplejwt.exceptions import TokenError
+
+class LogoutSerializer(serializers.Serializer):
+    refresh = serializers.CharField(required=True, help_text="Refresh token to blacklist")
+
     def validate_refresh(self, value):
         """ Validate refresh token is valid before blacklisting """
         # The underlying library will handle already blacklisted tokens gracefully.
         try:
             RefreshToken(value)
-        except Exception:
+        except TokenError:
             raise serializers.ValidationError("Invalid or malformed refresh token.")
         return value
 

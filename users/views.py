@@ -78,6 +78,9 @@ class UserViewSet(viewsets.ViewSet):
         """
         Logout user by blacklisting the refresh token.
         """
+        serializer = LogoutSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        
         refresh_token = serializer.validated_data.get("refresh")
         try:
             token = RefreshToken(refresh_token)
@@ -88,9 +91,6 @@ class UserViewSet(viewsets.ViewSet):
                 status=status.HTTP_400_BAD_REQUEST
             )
         
-        return response.Response({
-            "message": "Successfully logged out."
-        }, status=status.HTTP_200_OK)
         return response.Response({
             "message": "Successfully logged out."
         }, status=status.HTTP_200_OK)

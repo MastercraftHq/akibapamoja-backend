@@ -158,6 +158,7 @@ class UserTests(APITestCase):
             "identifier": "existing@example.com",
             "password": "StrongPass123"
         })
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {response.data['authToken']}")
         self.refresh_token = response.data['refreshToken']
 
