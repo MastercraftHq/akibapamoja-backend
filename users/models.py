@@ -1,5 +1,6 @@
 from datetime import timedelta
 import uuid
+import logging
 import secrets
 from django.contrib.auth.hashers import make_password, check_password
 from django.db import models
@@ -12,6 +13,7 @@ from django.contrib.auth.models import (
     BaseUserManager,
     PermissionsMixin
 )
+from django.core.validators import RegexValidator
 from users.enums import UserRole
 
 
@@ -44,7 +46,18 @@ class User(AbstractBaseUser, PermissionsMixin):
     first_name = models.CharField(max_length=30, blank=True)
     last_name = models.CharField(max_length=30, blank=True)
     email = models.EmailField(unique=True, null=True, blank=True)
-    phone = models.CharField(max_length=15, unique=True, null=True, blank=True)
+    phone = models.CharField(
+        max_length=15,
+        unique=True,
+        null=False,
+        blank=False,
+        validators=[
+            RegexValidator(
+                regex=r'^\+?1?\d{9,15}$',
+                message="Phone number must be entered in the format: '+999999999'. Up to 15 digits allowed."
+            )
+        ]
+    )
 
     is_active = models.BooleanField(default=True)
     is_staff = models.BooleanField(default=False)
@@ -82,9 +95,21 @@ def get_default_expires_at():
 
 class OTP(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="otps", null=True, blank=True)
-    phone = models.CharField(max_length=15, help_text="Phone number to send SMS to")
+    phone = models.CharField(
+        max_length=15,
+        help_text="Phone number to send SMS to",
+        validators=[
+            RegexValidator(
+                regex=r'^\+?1?\d{9,15}$',
+                message="Phone number must be entered in the format: '+999999999'. Up to 15 digits allowed."
+            )
+        ]
+    )
     hashed_code = models.CharField(max_length=255, help_text="Hashed OTP code", blank=True)
-    code = models.CharField(max_length=6, help_text="6-digit OTP code (deprecated; use hashed_code)", blank=True)
+    verification_attempts = models.PositiveIntegerField(default=0)
+    max_attempts = models.PositiveIntegerField(default=3)
+    verification_attempts = models.PositiveIntegerField(default=0)
+    max_attempts = models.PositiveIntegerField(default=3)
     purpose = models.CharField(
         max_length=20,
         choices=[
@@ -105,13 +130,64 @@ class OTP(models.Model):
     def is_expired(self):
         return timezone.now() > self.expires_at
 
+    def increment_attempts(self):
+        self.verification_attempts += 1
+        self.save(update_fields=['verification_attempts'])
+        return self.verification_attempts >= self.max_attempts
+
+    def clean(self):
+        if self.phone:
+            # Normalize phone: strip to digits and add '+' if missing (assuming international format)
+            self.phone = ''.join(filter(str.isdigit, self.phone))
+            if not self.phone.startswith('+'):
+                self.phone = '+' + self.phone
+        super().clean()
+
+    def increment_attempts(self):
+        self.verification_attempts += 1
+        self.save(update_fields=['verification_attempts'])
+        return self.verification_attempts >= self.max_attempts
+
+    def clean(self):
+        if self.phone:
+            # Normalize phone: strip to digits and add '+' if missing (assuming international format)
+            self.phone = ''.join(filter(str.isdigit, self.phone))
+            if not self.phone.startswith('+'):
+                self.phone = '+' + self.phone
+        super().clean()
+
     class Meta:
         ordering = ["-created_at"]
         verbose_name = "OTP"
         verbose_name_plural = "OTPs"
+        indexes = [
+            models.Index(fields=['phone', 'purpose', 'is_used']),
+            models.Index(fields=['phone', 'purpose', 'expires_at']),
+            models.Index(fields=['phone', 'is_used', 'expires_at']),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=['phone', 'purpose'],
+                condition=models.Q(is_used=False),
+                name='unique_active_otp_per_phone_purpose'
+            ),
+        ]
+        indexes = [
+            models.Index(fields=['phone', 'is_used', 'expires_at']),
+        ]
 
 class SMSDevice(Device):
-    phone_number = models.CharField(max_length=15, unique=True, help_text="Phone number to send SMS to")
+    phone_number = models.CharField(
+        max_length=15,
+        unique=True,
+        help_text="Phone number to send SMS to",
+        validators=[
+            RegexValidator(
+                regex=r'^\+?1?\d{9,15}$',
+                message="Phone number must be entered in the format: '+999999999'. Up to 15 digits allowed."
+            )
+        ]
+    )
     current_token = models.CharField(max_length=255, blank=True)
     token_timestamp = models.DateTimeField(blank=True, null=True)
 
@@ -147,7 +223,7 @@ class SMSDevice(Device):
 
     def send_token(self, token=None):
         """Send the token to the user's phone number"""
-        import logging
+        
         logger = logging.getLogger(__name__)
 
         if token is None:

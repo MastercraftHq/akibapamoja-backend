@@ -2,7 +2,7 @@ from rest_framework import status
 from rest_framework.test import APITestCase
 from django.test import TestCase, override_settings
 from django.urls import reverse
-from unittest.mock import patch
+from unittest.mock import patch, Mock
 from users.utils import send_otp, verify_otp, generate_otp_code
 from users.models import User, OTP, SMSDevice
 from users.exceptions import OTPSendError
@@ -263,7 +263,7 @@ class OTPTests(APITestCase):
     @override_settings(TWILIO_ACCOUNT_SID='test', TWILIO_AUTH_TOKEN='test', TWILIO_PHONE_NUMBER='+123')
     @patch('twilio.rest.Client.messages')
     def test_send_otp_integration(self, mock_messages):
-        mock_messages.create.return_value = mock.Mock(sid='test_sid')
+        mock_messages.create.return_value = Mock(sid='test_sid')
         data = {"phone": self.test_phone, "purpose": self.test_purpose}
         response = self.client.post(self.send_url, data)
         self.assertEqual(response.status_code, status.HTTP_200_OK)

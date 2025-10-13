@@ -15,14 +15,16 @@ from users.serializers import (
     UpdateUserSerializer,
     LoginObtainPairSerializer,
     LoginRefreshSerializer,
-    LogoutSerializer
+    LogoutSerializer,
+    OTPSendSerializer,
+    OTPVerifySerializer
 )
 from users.exceptions import (
     RegistrationError,
     AuthenticationError,
     UpdateError
 )
-from users.utils import generate_tokens_for_user
+from users.utils import generate_tokens_for_user, send_otp, verify_otp
 
 
 class UserViewSet(viewsets.ViewSet):
@@ -176,12 +178,6 @@ class MeViewSet(viewsets.ViewSet):
             "message": "Profile updated successfully.",
             "user": UserSerializer(user).data
         }, status=status.HTTP_200_OK)
-from users.serializers import OTPSendSerializer, OTPVerifySerializer
-from users.utils import send_otp, verify_otp
-from rest_framework import status
-from drf_yasg.utils import swagger_auto_schema
-
-
 class OTPViewSet(viewsets.ViewSet):
     permission_classes = [permissions.AllowAny]
 
@@ -193,15 +189,16 @@ class OTPViewSet(viewsets.ViewSet):
     @action(detail=False, methods=['post'], url_path='send')
     def send(self, request):
         serializer = OTPSendSerializer(data=request.data)
-        if serializer.is_valid():
-            phone = serializer.validated_data['phone']
-            purpose = serializer.validated_data['purpose']
-            try:
-                send_otp(phone, purpose=purpose)
-                return response.Response({"message": "OTP sent successfully."}, status=status.HTTP_200_OK)
-            except Exception as e:
-                return response.Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
-        return response.Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+        serializer.is_valid(raise_exception=True)
+
+        phone = serializer.validated_data['phone']
+        purpose = serializer.validated_data['purpose']
+
+        try:
+            send_otp(phone, purpose)
+            return response.Response({"message": "OTP sent successfully."}, status=status.HTTP_200_OK)
+        except Exception as e:
+            return response.Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 
     @swagger_auto_schema(
         method='post',
@@ -211,7 +208,7 @@ class OTPViewSet(viewsets.ViewSet):
     @action(detail=False, methods=['post'], url_path='verify')
     def verify(self, request):
         serializer = OTPVerifySerializer(data=request.data)
-        if serializer.is_valid():
+        if serializer.is_valid(raise_exception=True):
             phone = serializer.validated_data['phone']
             otp_code = serializer.validated_data['otp_code']
             purpose = serializer.validated_data['purpose']

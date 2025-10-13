@@ -61,6 +61,7 @@ MIDDLEWARE = [
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
+    'django_otp.middleware.OTPMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     # 'corsheaders.middleware.CorsMiddleware',
@@ -174,6 +175,17 @@ MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 TWILIO_ACCOUNT_SID = os.getenv('TWILIO_ACCOUNT_SID')
 TWILIO_AUTH_TOKEN = os.getenv('TWILIO_AUTH_TOKEN')
 TWILIO_PHONE_NUMBER = os.getenv('TWILIO_PHONE_NUMBER')
+
+# Validate Twilio configuration
+missing_vars = []
+if not TWILIO_ACCOUNT_SID:
+    missing_vars.append('TWILIO_ACCOUNT_SID')
+if not TWILIO_AUTH_TOKEN:
+    missing_vars.append('TWILIO_AUTH_TOKEN')
+if not TWILIO_PHONE_NUMBER:
+    missing_vars.append('TWILIO_PHONE_NUMBER')
+if missing_vars:
+    raise RuntimeError(f"Missing Twilio configuration variables: {', '.join(missing_vars)}")
 
 # Swagger settings for Bearer token authentication
 SWAGGER_SETTINGS = {
