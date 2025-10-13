@@ -87,7 +87,7 @@ class UserViewSet(viewsets.ViewSet):
             token.blacklist()
         except Exception as e:
             return response.Response(
-                {"error": "Invalid or expired refresh token."},
+                {"error": f"Invalid or expired refresh token: {str(e)}"},
                 status=status.HTTP_400_BAD_REQUEST
             )
         
@@ -176,3 +176,47 @@ class MeViewSet(viewsets.ViewSet):
             "message": "Profile updated successfully.",
             "user": UserSerializer(user).data
         }, status=status.HTTP_200_OK)
+from users.serializers import OTPSendSerializer, OTPVerifySerializer
+from users.utils import send_otp, verify_otp
+from rest_framework import status
+from drf_yasg.utils import swagger_auto_schema
+
+
+class OTPViewSet(viewsets.ViewSet):
+    permission_classes = [permissions.AllowAny]
+
+    @swagger_auto_schema(
+        method='post',
+        request_body=OTPSendSerializer,
+        responses={200: "OTP sent successfully.", 400: "Invalid data or failed to send OTP."}
+    )
+    @action(detail=False, methods=['post'], url_path='send')
+    def send(self, request):
+        serializer = OTPSendSerializer(data=request.data)
+        if serializer.is_valid():
+            phone = serializer.validated_data['phone']
+            purpose = serializer.validated_data['purpose']
+            try:
+                send_otp(phone, purpose=purpose)
+                return response.Response({"message": "OTP sent successfully."}, status=status.HTTP_200_OK)
+            except Exception as e:
+                return response.Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        return response.Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    @swagger_auto_schema(
+        method='post',
+        request_body=OTPVerifySerializer,
+        responses={200: "OTP verified successfully.", 400: "Invalid OTP or data."}
+    )
+    @action(detail=False, methods=['post'], url_path='verify')
+    def verify(self, request):
+        serializer = OTPVerifySerializer(data=request.data)
+        if serializer.is_valid():
+            phone = serializer.validated_data['phone']
+            otp_code = serializer.validated_data['otp_code']
+            purpose = serializer.validated_data['purpose']
+            if verify_otp(phone, otp_code, purpose):
+                return response.Response({"message": "OTP verified successfully."}, status=status.HTTP_200_OK)
+            else:
+                return response.Response({"error": "Invalid OTP."}, status=status.HTTP_400_BAD_REQUEST)
+        return response.Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)

@@ -4,7 +4,7 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from django.contrib.auth import authenticate
 from django.db import transaction
 from rest_framework_simplejwt.token_blacklist.models import BlacklistedToken
-from users.models import User, Profile
+from users.models import User, Profile, SMSDevice, OTP
 from users.enums import UserRole
 from users.validators import (
     is_email,
@@ -158,3 +158,14 @@ class UpdateUserSerializer(serializers.ModelSerializer):
         profile.save()
 
         return instance
+
+
+class OTPSendSerializer(serializers.Serializer):
+    phone = serializers.CharField(max_length=15, required=True)
+    purpose = serializers.CharField(max_length=20, default="login")
+
+
+class OTPVerifySerializer(serializers.Serializer):
+    phone = serializers.CharField(max_length=15, required=True)
+    otp_code = serializers.CharField(max_length=6, required=True)
+    purpose = serializers.CharField(max_length=20, default="login")
