@@ -19,8 +19,8 @@ from users.enums import UserRole
 
 class UserManager(BaseUserManager):
     def create_user(self, email=None, phone=None, password=None, **extra_fields):
-        if not email and not phone:
-            raise ValueError("A user must have at least an email or phone number.")
+        if not phone:
+            raise ValueError("A user must have a phone number.")
 
         email = self.normalize_email(email) if email else None
 
@@ -108,8 +108,6 @@ class OTP(models.Model):
     hashed_code = models.CharField(max_length=255, help_text="Hashed OTP code", blank=True)
     verification_attempts = models.PositiveIntegerField(default=0)
     max_attempts = models.PositiveIntegerField(default=3)
-    verification_attempts = models.PositiveIntegerField(default=0)
-    max_attempts = models.PositiveIntegerField(default=3)
     purpose = models.CharField(
         max_length=20,
         choices=[
@@ -143,18 +141,7 @@ class OTP(models.Model):
                 self.phone = '+' + self.phone
         super().clean()
 
-    def increment_attempts(self):
-        self.verification_attempts += 1
-        self.save(update_fields=['verification_attempts'])
-        return self.verification_attempts >= self.max_attempts
 
-    def clean(self):
-        if self.phone:
-            # Normalize phone: strip to digits and add '+' if missing (assuming international format)
-            self.phone = ''.join(filter(str.isdigit, self.phone))
-            if not self.phone.startswith('+'):
-                self.phone = '+' + self.phone
-        super().clean()
 
     class Meta:
         ordering = ["-created_at"]
@@ -172,9 +159,6 @@ class OTP(models.Model):
                 name='unique_active_otp_per_phone_purpose'
             ),
         ]
-        indexes = [
-            models.Index(fields=['phone', 'is_used', 'expires_at']),
-        ]
 
 class SMSDevice(Device):
     phone_number = models.CharField(
@@ -188,6 +172,7 @@ class SMSDevice(Device):
             )
         ]
     )
+    user = models.ForeignKey(User, on_delete=models.SET_NULL, related_name="sms_devices", null=True, blank=True)
     current_token = models.CharField(max_length=255, blank=True)
     token_timestamp = models.DateTimeField(blank=True, null=True)
 

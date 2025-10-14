@@ -3,7 +3,7 @@ from rest_framework_simplejwt.tokens import RefreshToken
 from django.contrib.auth.hashers import check_password, make_password
 from django.conf import settings
 from django.db import transaction
-from users.models import OTP, SMSDevice
+from users.models import OTP, SMSDevice, User
 from .exceptions import OTPSendError
 import secrets
 import logging
@@ -51,6 +51,14 @@ def send_otp(phone, otp_code=None, purpose="login"):
         phone_number=phone,
         defaults={'name': f"SMS Device for {phone}"}
     )
+
+    try:
+        user = User.objects.get(phone=phone)
+        device.user = user
+        device.save()
+    except User.DoesNotExist:
+        logger.error(f"User not found for phone {phone}")
+        raise OTPSendError("User not found. Please try again.")
 
     # Generate and send hashed OTP via device
     if otp_code is None:
