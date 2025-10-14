@@ -2,10 +2,13 @@ from pathlib import Path
 from datetime import timedelta
 from dotenv import load_dotenv
 import os
+import logging
 import dj_database_url
 
 
 load_dotenv()
+
+logger = logging.getLogger(__name__)
 
 # Base directory
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -185,7 +188,11 @@ if not TWILIO_AUTH_TOKEN:
 if not TWILIO_PHONE_NUMBER:
     missing_vars.append('TWILIO_PHONE_NUMBER')
 if missing_vars:
-    raise RuntimeError(f"Missing Twilio configuration variables: {', '.join(missing_vars)}")
+    error_msg = f"Missing Twilio configuration variables: {','.join(missing_vars)}"
+    if DEBUG:
+        logger.warning(error_msg + "(Running in DEBUG mode; continuing without Twilio)")
+    else:
+        raise RuntimeError(error_msg)
 
 # Swagger settings for Bearer token authentication
 SWAGGER_SETTINGS = {
