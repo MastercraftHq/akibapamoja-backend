@@ -9,6 +9,7 @@ from users.exceptions import OTPSendError
 from django.contrib.auth.hashers import make_password, check_password
 from django.utils import timezone
 from datetime import timedelta
+from django.core.cache import cache
 
 
 class UserTests(APITestCase):
@@ -317,6 +318,13 @@ class OTPUtilsTests(TestCase):
     def setUp(self):
         self.phone = "0712345678"
         self.purpose = "login"
+        count_key = f"otp:count:{self.phone}"
+        cooldown_key = f"otp:cooldown:{self.phone}"
+        verify_key = f"otp:verify:{self.phone}"
+        cache.delete(count_key)
+        cache.delete(cooldown_key)
+        cache.delete(verify_key)
+        self.user = User.objects.create_user(phone=self.phone, password='test')
 
     def test_generate_otp_code(self):
         code = generate_otp_code()
@@ -324,16 +332,14 @@ class OTPUtilsTests(TestCase):
         self.assertTrue(code.isdigit())
 
     @patch('users.models.SMSDevice.send_token')
-    @patch('users.models.SMSDevice.generate_challenge')
-    def test_send_otp_success(self, mock_generate, mock_send):
-        mock_generate.return_value = "123456"
+    def test_send_otp_success(self, mock_send):
         mock_send.return_value = True
         result = send_otp(self.phone, purpose=self.purpose)
         self.assertTrue(result)
         device = SMSDevice.objects.get(phone_number=self.phone)
         self.assertIsNotNone(device.current_token)
         otp = OTP.objects.get(phone=self.phone, purpose=self.purpose)
-        self.assertTrue(check_password("123456", otp.hashed_code))
+        self.assertTrue(check_password(result, otp.hashed_code))
 
     def test_send_otp_no_phone(self):
         with self.assertRaises(ValueError):

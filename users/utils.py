@@ -37,48 +37,55 @@ def send_otp(phone, otp_code=None, purpose="login"):
         raise OTPSendError("Please wait before requesting another OTP.")
 
     # Check and increment send count
-    current_count = cache.get(count_key)
-    if current_count is None:
-        cache.set(count_key, 0, timeout=window_seconds)
-        current_count = 0
+    try:
+        current_count = cache.incr(count_key)
+    except ValueError:
+        cache.set(count_key, 1, timeout=window_seconds)
+        current_count = 1
 
-    if current_count >= max_sends:
+    if current_count > max_sends:
         raise OTPSendError("OTP request limit exceeded. Try again later.")
 
-    cache.incr(count_key)
-
-    device, _ = SMSDevice.objects.get_or_create(
-        phone_number=phone,
-        defaults={'name': f"SMS Device for {phone}"}
-    )
-
+    user = None
     try:
         user = User.objects.get(phone=phone)
+    except User.DoesNotExist:
+        if purpose not in ["register", "phone_verification"]:
+            logger.info(f"Fake OTP send for unregistered phone: {phone}")
+            otp_code = generate_otp_code()
+            cache.set(cooldown_key, True, timeout=cooldown_seconds)
+            return otp_code
+
+    # Create or get device
+    device, created = SMSDevice.objects.get_or_create(
+        phone_number=phone,
+        defaults={'name': f"SMS Device for {phone}", 'user': user}
+    )
+
+    if not created and user and device.user != user:
         device.user = user
         device.save()
-    except User.DoesNotExist:
-        logger.error(f"User not found for phone {phone}")
-        raise OTPSendError("User not found. Please try again.")
 
-    # Generate and send hashed OTP via device
+    # Generate OTP if not provided
     if otp_code is None:
-        otp_code = device.generate_challenge()
-    else:
-        hashed_code = make_password(otp_code)
-        device.current_token = hashed_code
-        device.token_timestamp = timezone.now()
-        device.save()
+        otp_code = generate_otp_code()
+    
+    # Hash once
+    hashed_code = make_password(otp_code)
+    
+    device.current_token = hashed_code
+    device.token_timestamp = timezone.now()
+    device.save()
 
     success = device.send_token(token=otp_code)
     if not success:
         cache.decr(count_key)
         logger.error(f"Failed to send OTP to {phone}")
-        raise OTPSendError("Failed to send OTP. Please try again.")
+        raise OTPSendError("Unable to send OTP. Please try again.")
     
     # Set cooldown after successful send
     cache.set(cooldown_key, True, timeout=cooldown_seconds)
     
-    # Atomically mark previous active OTPs as used and create new one
     with transaction.atomic():
         OTP.objects.filter(
             phone=phone,
@@ -89,19 +96,28 @@ def send_otp(phone, otp_code=None, purpose="login"):
         
         OTP.objects.create(
             phone=phone,
-            hashed_code=make_password(otp_code),
+            hashed_code=hashed_code,
             purpose=purpose,
         )
-    return True
+    return otp_code
 
 def verify_otp(phone, otp_code, purpose="login"):
     """Verify an OTP code"""
 
-    device = SMSDevice.objects.filter(phone_number=phone).first()
-    if not device:
-        return False
+    verify_key = f"otp:verify:{phone}"
+    max_attempts = 5
+    window_seconds = 600
 
     with transaction.atomic():
+        device = SMSDevice.objects.filter(phone_number=phone).select_for_update().first()
+
+        # Rate limiting
+        attempts = cache.get(verify_key, 0)
+        attempts += 1
+        cache.set(verify_key, attempts, timeout=window_seconds)
+
+        verification_success = False
+
         otp_objs = OTP.objects.filter(
             phone=phone,
             purpose=purpose,
@@ -109,20 +125,22 @@ def verify_otp(phone, otp_code, purpose="login"):
             expires_at__gt=timezone.now()
         ).order_by('-created_at').select_for_update()
 
-        if not otp_objs.exists():
-            return False
+        otp_obj = otp_objs.first() if otp_objs.exists() else None
 
-        otp_obj = otp_objs.first()
+        # Perform constant-time comparison even if no OTP
+        dummy_hash = make_password("invalid")
+        hash_to_check = otp_obj.hashed_code if otp_obj else dummy_hash
 
-        if not check_password(otp_code, otp_obj.hashed_code):
-            return False
+        if check_password(otp_code, hash_to_check) and otp_obj and attempts <= max_attempts and device:
+            verification_success = True
+            otp_obj.is_used = True
+            otp_obj.save()
 
-        otp_obj.is_used = True
-        otp_obj.save()
+            # Clear device token to prevent reuse
+            device.current_token = None
+            device.token_timestamp = None
+            device.save()
 
-        # Clear device token to prevent reuse
-        device.current_token = ''
-        device.token_timestamp = None
-        device.save()
+            cache.delete(verify_key)
 
-    return True
+    return verification_success

@@ -24,6 +24,7 @@ from users.exceptions import (
     AuthenticationError,
     UpdateError
 )
+import logging
 from users.utils import generate_tokens_for_user, send_otp, verify_otp
 
 
@@ -198,7 +199,9 @@ class OTPViewSet(viewsets.ViewSet):
             send_otp(phone, purpose)
             return response.Response({"message": "OTP sent successfully."}, status=status.HTTP_200_OK)
         except Exception as e:
-            return response.Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+            logger = logging.getLogger(__name__)
+            logger.error(f"Failed to send OTP: {str(e)}")
+            return response.Response({"error": "Unable to send OTP. Please try again later."}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
     @swagger_auto_schema(
         method='post',

@@ -173,7 +173,7 @@ class SMSDevice(Device):
         ]
     )
     user = models.ForeignKey(User, on_delete=models.SET_NULL, related_name="sms_devices", null=True, blank=True)
-    current_token = models.CharField(max_length=255, blank=True)
+    current_token = models.CharField(max_length=255, blank=True, null=True)
     token_timestamp = models.DateTimeField(blank=True, null=True)
 
     def __init__(self, *args, **kwargs):
