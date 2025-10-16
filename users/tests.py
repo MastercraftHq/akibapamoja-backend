@@ -212,8 +212,14 @@ class OTPTests(APITestCase):
         self.test_phone = "0712345678"
         self.test_purpose = "login"
         self.test_otp_code = "123456"
+        count_key = f"otp:count:{self.test_phone}"
+        cooldown_key = f"otp:cooldown:{self.test_phone}"
+        verify_key = f"otp:verify:{self.test_phone}"
+        cache.delete(count_key)
+        cache.delete(cooldown_key)
+        cache.delete(verify_key)
 
-    @patch("users.utils.send_otp")
+    @patch("users.views.send_otp")
     def test_send_otp_success(self, mock_send_otp):
         mock_send_otp.return_value = True
         data = {"phone": self.test_phone, "purpose": self.test_purpose}
@@ -233,11 +239,11 @@ class OTPTests(APITestCase):
         mock_send_otp.side_effect = Exception("Twilio error")
         data = {"phone": self.test_phone, "purpose": self.test_purpose}
         response = self.client.post(self.send_url, data)
-        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(response.status_code, status.HTTP_500_INTERNAL_SERVER_ERROR)
         self.assertIn("error", response.data)
-        self.assertEqual(response.data["error"], "Twilio error")
+        self.assertEqual(response.data["error"], "Unable to send OTP. Please try again later.")
 
-    @patch("users.utils.verify_otp")
+    @patch("users.views.verify_otp")
     def test_verify_otp_success(self, mock_verify_otp):
         mock_verify_otp.return_value = True
         data = {"phone": self.test_phone, "otp_code": self.test_otp_code, "purpose": self.test_purpose}
@@ -294,7 +300,7 @@ class OTPTests(APITestCase):
         device.current_token = hashed
         device.token_timestamp = timezone.now() - timedelta(minutes=11)
         device.save()
-        OTP.objects.create(phone=self.test_phone, hashed_code=hashed, purpose=self.test_purpose)
+        OTP.objects.create(phone=self.test_phone, hashed_code=hashed, purpose=self.test_purpose, expires_at=timezone.now() - timedelta(minutes=1))
         data = {"phone": self.test_phone, "otp_code": otp_code, "purpose": self.test_purpose}
         response = self.client.post(self.verify_url, data)
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
