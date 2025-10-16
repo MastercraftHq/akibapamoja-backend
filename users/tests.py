@@ -219,7 +219,7 @@ class OTPTests(APITestCase):
         cache.delete(cooldown_key)
         cache.delete(verify_key)
 
-    @patch("users.utils.send_otp")
+    @patch("users.views.send_otp")
     def test_send_otp_success(self, mock_send_otp):
         mock_send_otp.return_value = True
         data = {"phone": self.test_phone, "purpose": self.test_purpose}
@@ -243,7 +243,7 @@ class OTPTests(APITestCase):
         self.assertIn("error", response.data)
         self.assertEqual(response.data["error"], "Unable to send OTP. Please try again later.")
 
-    @patch("users.utils.verify_otp")
+    @patch("users.views.verify_otp")
     def test_verify_otp_success(self, mock_verify_otp):
         mock_verify_otp.return_value = True
         data = {"phone": self.test_phone, "otp_code": self.test_otp_code, "purpose": self.test_purpose}
@@ -276,6 +276,7 @@ class OTPTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertTrue(SMSDevice.objects.filter(phone_number=self.test_phone).exists())
         self.assertTrue(OTP.objects.filter(phone=self.test_phone, purpose=self.test_purpose).exists())
+        self.user = User.objects.create_user(phone=self.test_phone, password='test')
 
     def test_verify_otp_integration_success(self):
         device = SMSDevice.objects.create(phone_number=self.test_phone)
