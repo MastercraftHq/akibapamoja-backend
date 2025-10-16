@@ -226,7 +226,7 @@ class OTPTests(APITestCase):
         response = self.client.post(self.send_url, data)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["message"], "OTP sent successfully.")
-        mock_send_otp.assert_called_once_with(self.test_phone, purpose=self.test_purpose)
+        mock_send_otp.assert_called_once_with(self.test_phone, self.test_purpose)
 
     def test_send_otp_failure_invalid_data(self):
         data = {"purpose": self.test_purpose}  # Missing phone
@@ -250,7 +250,7 @@ class OTPTests(APITestCase):
         response = self.client.post(self.verify_url, data)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["message"], "OTP verified successfully.")
-        mock_verify_otp.assert_called_once_with(self.test_phone, self.test_otp_code, purpose=self.test_purpose)
+        mock_verify_otp.assert_called_once_with(self.test_phone, self.test_otp_code, self.test_purpose)
 
     @patch("users.utils.verify_otp")
     def test_verify_otp_failure_invalid_otp(self, mock_verify_otp):
@@ -271,12 +271,12 @@ class OTPTests(APITestCase):
     @patch('twilio.rest.Client.messages')
     def test_send_otp_integration(self, mock_messages):
         mock_messages.create.return_value = Mock(sid='test_sid')
+        self.user = User.objects.create_user(phone=self.test_phone, password='test')
         data = {"phone": self.test_phone, "purpose": self.test_purpose}
         response = self.client.post(self.send_url, data)
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertTrue(SMSDevice.objects.filter(phone_number=self.test_phone).exists())
         self.assertTrue(OTP.objects.filter(phone=self.test_phone, purpose=self.test_purpose).exists())
-        self.user = User.objects.create_user(phone=self.test_phone, password='test')
 
     def test_verify_otp_integration_success(self):
         device = SMSDevice.objects.create(phone_number=self.test_phone)
