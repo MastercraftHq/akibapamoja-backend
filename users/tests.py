@@ -219,7 +219,7 @@ class OTPTests(APITestCase):
         cache.delete(cooldown_key)
         cache.delete(verify_key)
 
-    @patch("users.views.send_otp")
+    @patch("users.utils.send_otp")
     def test_send_otp_success(self, mock_send_otp):
         mock_send_otp.return_value = True
         data = {"phone": self.test_phone, "purpose": self.test_purpose}
@@ -234,7 +234,7 @@ class OTPTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn("phone", response.data)
 
-    @patch("users.utils.send_otp")
+    @patch("users.views.send_otp")
     def test_send_otp_failure_exception(self, mock_send_otp):
         mock_send_otp.side_effect = Exception("Twilio error")
         data = {"phone": self.test_phone, "purpose": self.test_purpose}
@@ -243,7 +243,7 @@ class OTPTests(APITestCase):
         self.assertIn("error", response.data)
         self.assertEqual(response.data["error"], "Unable to send OTP. Please try again later.")
 
-    @patch("users.views.verify_otp")
+    @patch("users.utils.verify_otp")
     def test_verify_otp_success(self, mock_verify_otp):
         mock_verify_otp.return_value = True
         data = {"phone": self.test_phone, "otp_code": self.test_otp_code, "purpose": self.test_purpose}
@@ -300,7 +300,7 @@ class OTPTests(APITestCase):
         device.current_token = hashed
         device.token_timestamp = timezone.now() - timedelta(minutes=11)
         device.save()
-        OTP.objects.create(phone=self.test_phone, hashed_code=hashed, purpose=self.test_purpose, expires_at=timezone.now() - timedelta(minutes=1))
+        OTP.objects.create(phone=self.test_phone, hashed_code=hashed, purpose=self.test_purpose, expires_at=timezone.now() - timedelta(minutes=11))
         data = {"phone": self.test_phone, "otp_code": otp_code, "purpose": self.test_purpose}
         response = self.client.post(self.verify_url, data)
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
