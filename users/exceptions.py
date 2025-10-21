@@ -34,3 +34,9 @@ class InvalidGroupCodeError(APIException):
     status_code = status.HTTP_400_BAD_REQUEST
     default_detail = "Invalid or expired group invitation code."
     default_code = "invalid_group_code"
+
+class OTPSendError(APIException):
+    status_code = status.HTTP_400_BAD_REQUEST
+    default_detail = "Failed to send OTP. Please try again."
+    default_code = "otp_send_failed"
+    

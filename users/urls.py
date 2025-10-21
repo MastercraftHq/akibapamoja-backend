@@ -1,6 +1,6 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
-from users.views import UserViewSet, MeViewSet, LoginObtainPairView, LoginRefreshView
+from users.views import UserViewSet, MeViewSet, LoginObtainPairView, LoginRefreshView, OTPViewSet
 
 router = DefaultRouter()
 router.register(r'auth', UserViewSet, basename='auth')
@@ -14,6 +14,8 @@ me = MeViewSet.as_view({
 
 urlpatterns = [
     path('me/', me, name='me-profile'),
+    path('otp/verify/', OTPViewSet.as_view({'post': 'verify'}), name='otp-verify'),
+    path('otp/send/', OTPViewSet.as_view({'post': 'send'}), name='otp-send'),
     path('auth/obtain-pair/', LoginObtainPairView.as_view(), name='token_obtain_pair'),
     path('auth/refresh/', LoginRefreshView.as_view(), name='token_refresh'),
     path('', include(router.urls)),
