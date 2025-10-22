@@ -2,16 +2,19 @@ from pathlib import Path
 from datetime import timedelta
 from dotenv import load_dotenv
 import os
+import logging
 import dj_database_url
 
 
 load_dotenv()
 
+logger = logging.getLogger(__name__)
+
 # Base directory
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 # Security
-SECRET_KEY = os.environ.get('SECRET_KEY')
+SECRET_KEY = os.environ.get('SECRET_KEY', 'default_secret')
 DEBUG = os.environ.get('DEBUG', 'True') == 'True'
 ALLOWED_HOSTS = ['*']
 
@@ -45,7 +48,12 @@ INSTALLED_APPS = [
     # 'corsheaders',
     'rest_framework',
     "rest_framework_simplejwt",
+    "rest_framework_simplejwt.token_blacklist",
     "drf_yasg",
+    "django_otp",
+    "django_otp.plugins.otp_totp",
+    "django_otp.plugins.otp_static",
+    "django_otp.plugins.otp_hotp",
 ]
 
 # Middleware
@@ -56,6 +64,7 @@ MIDDLEWARE = [
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
+    'django_otp.middleware.OTPMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
     # 'corsheaders.middleware.CorsMiddleware',
@@ -165,6 +174,25 @@ CORS_ALLOW_CREDENTIALS = True
 MEDIA_URL = '/media/'
 MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 
+# Twilio Setting Configuration
+TWILIO_ACCOUNT_SID = os.getenv('TWILIO_ACCOUNT_SID')
+TWILIO_AUTH_TOKEN = os.getenv('TWILIO_AUTH_TOKEN')
+TWILIO_PHONE_NUMBER = os.getenv('TWILIO_PHONE_NUMBER')
+
+# Validate Twilio configuration
+missing_vars = []
+if not TWILIO_ACCOUNT_SID:
+    missing_vars.append('TWILIO_ACCOUNT_SID')
+if not TWILIO_AUTH_TOKEN:
+    missing_vars.append('TWILIO_AUTH_TOKEN')
+if not TWILIO_PHONE_NUMBER:
+    missing_vars.append('TWILIO_PHONE_NUMBER')
+if missing_vars:
+    error_msg = f"Missing Twilio configuration variables: {','.join(missing_vars)}"
+    if DEBUG:
+        logger.warning(error_msg + "(Running in DEBUG mode; continuing without Twilio)")
+    else:
+        raise RuntimeError(error_msg)
 
 # Swagger settings for Bearer token authentication
 SWAGGER_SETTINGS = {

@@ -3,6 +3,7 @@ from django.contrib.auth import get_user_model
 from django.utils import timezone
 from django.core.validators import MinValueValidator
 from chama.models import Chama
+from decimal import Decimal
 import uuid
 
 User = get_user_model()
@@ -50,7 +51,7 @@ class Contribution(models.Model):
     chama     = models.ForeignKey(Chama, on_delete=models.CASCADE, related_name="contributions")
     schedule  = models.ForeignKey(ContributionSchedule, on_delete=models.CASCADE, related_name="contributions", null=True)
     contribution_cycle = models.ForeignKey('ContributionCycle', on_delete=models.SET_NULL, null=True, blank=True, related_name="contributions")
-    amount    = models.DecimalField(max_digits=10, decimal_places=2, validators=[MinValueValidator(0.01)])
+    amount    = models.DecimalField(max_digits=10, decimal_places=2, validators=[MinValueValidator(Decimal('0.01'))])
     method    = models.CharField(max_length=10, choices=PaymentMethod.choices, default=PaymentMethod.MPESA)
     status    = models.CharField(max_length=10, choices=Status.choices, default=Status.PENDING)
     transaction_date = models.DateTimeField(default=timezone.now)

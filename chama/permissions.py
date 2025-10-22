@@ -7,7 +7,7 @@ class IsChamaAdmin(BasePermission):
     Allows access only to Chama admins.
     """
     def has_permission(self, request, view):
-        group_id = view.kwargs.get('groupId') or view.kwargs.get('pk') or request.data.get('groupId')
+        group_id = view.kwargs.get('chama_id') or view.kwargs.get('pk') or request.data.get('chama_id')
         if not group_id:
             return False
 
@@ -23,7 +23,7 @@ class IsChamaMember(BasePermission):
     Allows access only to Chama members.
     """
     def has_permission(self, request, view):
-        group_id = view.kwargs.get('groupId') or view.kwargs.get('pk') or request.data.get('groupId')
+        group_id = view.kwargs.get('chama_id') or view.kwargs.get('pk') or request.data.get('chama_id')
         if not group_id:
             return False
 

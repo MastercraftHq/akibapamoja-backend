@@ -1,7 +1,10 @@
-from django.db import transaction
 from rest_framework import serializers
+from rest_framework_simplejwt.serializers import TokenObtainPairSerializer, TokenRefreshSerializer
+from rest_framework_simplejwt.tokens import RefreshToken
 from django.contrib.auth import authenticate
-from users.models import User, Profile
+from django.db import transaction
+from rest_framework_simplejwt.token_blacklist.models import BlacklistedToken
+from users.models import User, Profile, SMSDevice, OTP
 from users.enums import UserRole
 from users.validators import (
     is_email,
@@ -37,17 +40,35 @@ class RegisterSerializer(serializers.ModelSerializer):
     class Meta:
         model = User
         fields = ["first_name", "last_name", "email", "phone", "password"]
+        extra_kwargs = {"password": {"write_only": True, "required": True}, "email": {"required": True}, "phone": {"required": True}}
 
     def validate(self, attrs):
         return validate_required_email_and_phone(attrs)
 
     @transaction.atomic
     def create(self, validated_data):
+        email = validated_data.pop("email")
         password = validated_data.pop("password")
-        user = User.objects.create_user(password=password, **validated_data)
+        phone = validated_data.pop("phone")
+        user = User.objects.create_user(password=password, phone=phone, email=email, **validated_data)
         Profile.objects.create(user=user)
         return user
 
+class LoginObtainPairSerializer(TokenObtainPairSerializer):
+    """Custom serializer for token obtain pair."""
+    
+    def validate(self, attrs):
+        data = super().validate(attrs)
+        data["message"] = "Token obtained successfully."
+        return data
+
+class LoginRefreshSerializer(TokenRefreshSerializer):
+    """Custom serializer for token refresh."""
+    
+    def validate(self, attrs):
+        data = super().validate(attrs)
+        data["message"] = "Token refreshed successfully."
+        return data
 
 class LoginSerializer(serializers.Serializer):
     identifier = serializers.CharField(
@@ -76,6 +97,23 @@ class LoginSerializer(serializers.Serializer):
 
         attrs["user"] = user
         return attrs
+
+class LogoutSerializer(serializers.Serializer):
+    refresh = serializers.CharField(required=True, help_text="Refresh token to blacklist")
+
+from rest_framework_simplejwt.exceptions import TokenError
+
+class LogoutSerializer(serializers.Serializer):
+    refresh = serializers.CharField(required=True, help_text="Refresh token to blacklist")
+
+    def validate_refresh(self, value):
+        """ Validate refresh token is valid before blacklisting """
+        # The underlying library will handle already blacklisted tokens gracefully.
+        try:
+            RefreshToken(value)
+        except TokenError:
+            raise serializers.ValidationError("Invalid or malformed refresh token.")
+        return value
 
 
 class UpdateUserSerializer(serializers.ModelSerializer):
@@ -120,3 +158,14 @@ class UpdateUserSerializer(serializers.ModelSerializer):
         profile.save()
 
         return instance
+
+
+class OTPSendSerializer(serializers.Serializer):
+    phone = serializers.CharField(max_length=15, required=True)
+    purpose = serializers.CharField(max_length=20, default="login")
+
+
+class OTPVerifySerializer(serializers.Serializer):
+    phone = serializers.CharField(max_length=15, required=True)
+    otp_code = serializers.CharField(max_length=6, required=True)
+    purpose = serializers.CharField(max_length=20, default="login")
