@@ -1,10 +1,10 @@
 from drf_yasg.utils import swagger_auto_schema
 from rest_framework import viewsets, permissions, status, response
 from rest_framework.decorators import action
-from rest_framework.parsers import MultiPartParser, FormParser
-from rest_framework_simplejwt.tokens import RefreshToken
+from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from rest_framework_simplejwt.token_blacklist.models import BlacklistedToken
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
+from rest_framework_simplejwt.tokens import RefreshToken
 
 
 from users.models import User
@@ -131,7 +131,7 @@ class LoginRefreshView(TokenRefreshView):
 
 class MeViewSet(viewsets.ViewSet):
     permission_classes = [permissions.IsAuthenticated]
-    parser_classes = [MultiPartParser, FormParser]  
+    parser_classes = [JSONParser, MultiPartParser, FormParser]  
 
     @swagger_auto_schema(
         responses={200: UserSerializer}
