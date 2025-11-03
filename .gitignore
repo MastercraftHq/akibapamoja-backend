@@ -70,6 +70,8 @@ coverage.xml
 .pytest_cache/
 cover/
 
+.idea/
+
 # Translations
 *.mo
 
