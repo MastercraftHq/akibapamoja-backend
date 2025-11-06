@@ -18,6 +18,13 @@ class ProfileSerializer(serializers.ModelSerializer):
     class Meta:
         model = Profile
         fields = ["bio", "avatar"]
+        read_only_fields = ["user"]
+
+    def update(self, instance, validated_data):
+        if 'avatar' in validated_data and instance.avatar:
+            instance.avatar.delete(save=False)
+        
+        return super().update(instance, validated_data)
 
 
 class UserSerializer(serializers.ModelSerializer):

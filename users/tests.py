@@ -2,15 +2,15 @@ from rest_framework import status
 from rest_framework.test import APITestCase
 from django.test import TestCase, override_settings
 from django.urls import reverse
+from django.core.files.uploadedfile import SimpleUploadedFile
 from unittest.mock import patch, Mock
 from users.utils import send_otp, verify_otp, generate_otp_code
-from users.models import User, OTP, SMSDevice
+from users.models import User, OTP, SMSDevice, Profile
 from users.exceptions import OTPSendError
 from django.contrib.auth.hashers import make_password, check_password
 from django.utils import timezone
 from datetime import timedelta
 from django.core.cache import cache
-
 
 class UserTests(APITestCase):
     def setUp(self):
@@ -404,3 +404,79 @@ class OTPUtilsTests(TestCase):
     def test_verify_otp_no_device(self):
         result = verify_otp("nonexistent", "123456")
         self.assertFalse(result)
+
+
+class ProfilePictureTests(APITestCase):
+    def setUp(self):
+        self.upload_url = reverse("me-picture")
+        self.user = User.objects.create_user(
+            email="test@example.com",
+            phone="0712345678",
+            first_name="Test",
+            last_name="User",
+            password="StrongPass123"
+        )
+        # Profile is created automatically via signal or in RegisterSerializer, but let's ensure it exists
+        self.profile, _ = Profile.objects.get_or_create(user=self.user)
+
+    def authenticate(self):
+        response = self.client.post(reverse("auth-login"), {
+            "identifier": "test@example.com",
+            "password": "StrongPass123"
+        })
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.client.credentials(HTTP_AUTHORIZATION=f"Bearer {response.data['authToken']}")
+
+    def test_upload_picture_success(self):
+        self.authenticate()
+        # Create a minimal valid JPEG image (1x1 pixel)
+        jpeg_data = b'\xff\xd8\xff\xe0\x00\x10JFIF\x00\x01\x01\x01\x00H\x00H\x00\x00\xff\xc0\x00\x11\x08\x00\x01\x00\x01\x01\x01\x11\x00\x02\x11\x01\x03\x11\x01\xff\xc4\x00\x14\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x08\xff\xc4\x00\x14\x10\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\xff\xda\x00\x0c\x03\x01\x00\x02\x11\x03\x11\x00\x3f\x00\xaa\xff\xd9'
+        image = SimpleUploadedFile("test_image.jpg", jpeg_data, content_type="image/jpeg")
+        data = {"avatar": image}
+        response = self.client.post(self.upload_url, data, format="multipart")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIn("message", response.data)
+        self.assertEqual(response.data["message"], "Profile picture uploaded successfully.")
+        # Refresh profile from db
+        self.profile.refresh_from_db()
+        self.assertIsNotNone(self.profile.avatar)
+
+    def test_upload_picture_unauthenticated(self):
+        jpeg_data = b'\xff\xd8\xff\xe0\x00\x10JFIF\x00\x01\x01\x01\x00H\x00H\x00\x00\xff\xc0\x00\x11\x08\x00\x01\x00\x01\x01\x01\x11\x00\x02\x11\x01\x03\x11\x01\xff\xc4\x00\x14\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x08\xff\xc4\x00\x14\x10\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\xff\xda\x00\x0c\x03\x01\x00\x02\x11\x03\x11\x00\x3f\x00\xaa\xff\xd9'
+        image = SimpleUploadedFile("test_image.jpg", jpeg_data, content_type="image/jpeg")
+        data = {"avatar": image}
+        response = self.client.post(self.upload_url, data, format="multipart")
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
+
+    def test_delete_picture_success(self):
+        # First upload a picture
+        self.authenticate()
+        jpeg_data = b'\xff\xd8\xff\xe0\x00\x10JFIF\x00\x01\x01\x01\x00H\x00H\x00\x00\xff\xc0\x00\x11\x08\x00\x01\x00\x01\x01\x01\x11\x00\x02\x11\x01\x03\x11\x01\xff\xc4\x00\x14\x00\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x08\xff\xc4\x00\x14\x10\x01\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\xff\xda\x00\x0c\x03\x01\x00\x02\x11\x03\x11\x00\x3f\x00\xaa\xff\xd9'
+        image = SimpleUploadedFile("test_image.jpg", jpeg_data, content_type="image/jpeg")
+        data = {"avatar": image}
+        response = self.client.post(self.upload_url, data, format="multipart")
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.profile.refresh_from_db()
+        self.assertIsNotNone(self.profile.avatar)
+
+        # Now delete it
+        response = self.client.delete(self.upload_url)
+        self.assertEqual(response.status_code, status.HTTP_204_NO_CONTENT)
+        self.assertIn("message", response.data)
+        self.assertEqual(response.data["message"], "Profile picture deleted successfully.")
+        self.profile.refresh_from_db()
+        self.assertFalse(self.profile.avatar)
+
+    def test_delete_picture_no_picture(self):
+        self.authenticate()
+        # Ensure no avatar
+        self.profile.avatar = None
+        self.profile.save()
+        response = self.client.delete(self.upload_url)
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+        self.assertIn("message", response.data)
+        self.assertEqual(response.data["message"], "Profile picture not found.")
+
+    def test_delete_picture_unauthenticated(self):
+        response = self.client.delete(self.upload_url)
+        self.assertEqual(response.status_code, status.HTTP_401_UNAUTHORIZED)
