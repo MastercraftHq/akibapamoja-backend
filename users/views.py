@@ -200,8 +200,19 @@ class ProfilePictureViewSet(viewsets.ViewSet):
     def upload_picture(self, request):
         serializer = ProfileSerializer(self.get_object(), data=request.data)
         serializer.is_valid(raise_exception=True)
-        serializer.save()
-        return response.Response({"message": "Profile picture uploaded successfully."}, status=status.HTTP_200_OK)
+
+        try:
+            profile = serializer.save()
+        except Exception as e:
+            return response.Response(
+                {"error": f"Failed to upload profile picture: {str(e)}"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        return response.Response({
+            "message": "Profile picture uploaded successfully.",
+            "profile": ProfileSerializer(profile).data
+        }, status=status.HTTP_200_OK)
 
     @swagger_auto_schema(
         responses={200: "Profile picture deleted successfully."}
