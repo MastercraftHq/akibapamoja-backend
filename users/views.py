@@ -2,6 +2,7 @@ from drf_yasg.utils import swagger_auto_schema
 from rest_framework import viewsets, permissions, status, response
 from rest_framework.decorators import action
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
+from rest_framework.exceptions import NotFound
 from rest_framework_simplejwt.token_blacklist.models import BlacklistedToken
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 from rest_framework_simplejwt.tokens import RefreshToken
@@ -183,9 +184,13 @@ class MeViewSet(viewsets.ViewSet):
 
 class ProfilePictureViewSet(viewsets.ViewSet):
     permission_classes = [permissions.IsAuthenticated]
+    parser_classes = [MultiPartParser, FormParser]
 
     def get_object(self):
-        return self.request.user.profile
+        try:
+            return self.request.user.profile
+        except AttributeError:
+            raise NotFound("Profile not found.")
     
     @swagger_auto_schema(
         request_body=ProfileSerializer,

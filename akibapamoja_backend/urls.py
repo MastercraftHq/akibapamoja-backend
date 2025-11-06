@@ -31,4 +31,7 @@ urlpatterns = [
     path('api/users/', include("users.urls")),
     path('api/chama/', include("chama.urls")),
     path('api/', include("contributions.urls")),
-] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
+]
+
+if settings.DEBUG:
+    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
