@@ -2,12 +2,13 @@ from drf_yasg.utils import swagger_auto_schema
 from rest_framework import viewsets, permissions, status, response
 from rest_framework.decorators import action
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
+from rest_framework.exceptions import NotFound
 from rest_framework_simplejwt.token_blacklist.models import BlacklistedToken
 from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 from rest_framework_simplejwt.tokens import RefreshToken
 
 
-from users.models import User
+from users.models import User, Profile
 from users.serializers import (
     RegisterSerializer,
     LoginSerializer,
@@ -17,7 +18,8 @@ from users.serializers import (
     LoginRefreshSerializer,
     LogoutSerializer,
     OTPSendSerializer,
-    OTPVerifySerializer
+    OTPVerifySerializer,
+    ProfileSerializer
 )
 from users.exceptions import (
     RegistrationError,
@@ -179,6 +181,52 @@ class MeViewSet(viewsets.ViewSet):
             "message": "Profile updated successfully.",
             "user": UserSerializer(user).data
         }, status=status.HTTP_200_OK)
+
+class ProfilePictureViewSet(viewsets.ViewSet):
+    permission_classes = [permissions.IsAuthenticated]
+    parser_classes = [MultiPartParser, FormParser]
+
+    def get_object(self):
+        try:
+            return self.request.user.profile
+        except AttributeError:
+            raise NotFound("Profile not found.")
+    
+    @swagger_auto_schema(
+        request_body=ProfileSerializer,
+        responses={200: "Profile picture uploaded successfully.", 400: "Invalid data."}
+    )
+    @action(detail=False, methods=['post'], url_path='upload')
+    def upload_picture(self, request):
+        serializer = ProfileSerializer(self.get_object(), data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        try:
+            profile = serializer.save()
+        except Exception as e:
+            return response.Response(
+                {"error": f"Failed to upload profile picture: {str(e)}"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        return response.Response({
+            "message": "Profile picture uploaded successfully.",
+            "profile": ProfileSerializer(profile).data
+        }, status=status.HTTP_200_OK)
+
+    @swagger_auto_schema(
+        responses={200: "Profile picture deleted successfully."}
+    )
+    @action(detail=False, methods=['delete'], url_path='delete-picture')
+    def delete_picture(self, request):
+        profile = self.get_object()
+        if profile.avatar:
+            profile.avatar.delete()
+            profile.avatar = None
+            profile.save()
+            return response.Response({"message": "Profile picture deleted successfully."}, status=status.HTTP_204_NO_CONTENT)
+        return response.Response({"message": "Profile picture not found."}, status=status.HTTP_404_NOT_FOUND)
+        
 class OTPViewSet(viewsets.ViewSet):
     permission_classes = [permissions.AllowAny]
 

@@ -19,6 +19,17 @@ class ProfileSerializer(serializers.ModelSerializer):
         model = Profile
         fields = ["bio", "avatar"]
 
+    def update(self, instance, validated_data):
+        old_avatar = instance.avatar if 'avatar' in validated_data and instance.avatar else None
+
+        updated_instance = super().update(instance, validated_data)
+
+        # Only delete the old avatar after successful update
+        if old_avatar and old_avatar != updated_instance.avatar:
+            old_avatar.delete(save=False)
+
+        return updated_instance
+
 
 class UserSerializer(serializers.ModelSerializer):
     profile = ProfileSerializer(required=False)
@@ -97,9 +108,6 @@ class LoginSerializer(serializers.Serializer):
 
         attrs["user"] = user
         return attrs
-
-class LogoutSerializer(serializers.Serializer):
-    refresh = serializers.CharField(required=True, help_text="Refresh token to blacklist")
 
 from rest_framework_simplejwt.exceptions import TokenError
 
